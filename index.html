@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>WASM Demo</title>
+    <!-- 引入 layui.css -->
+    <link href="js/layui/css/layui.css" rel="stylesheet">
+</head>
+
+<body>
+    <h1>WASM Demo</h1>
+    <input type="file" id="fileInput" />
+    <table class="layui-table" id="demo" lay-filter="test"></table>
+
+    <!-- 引入 layui.js -->
+    <script src="js/layui/layui.js"></script>
+    <script src="build/data_analysis.js"></script>
+
+    <!-- App Class -->
+    <script>
+        class FileInstance {
+            constructor(filename, file) {
+                // this.filepath = filepath;
+                this.filename = filename;
+                this.file = file;
+            }
+
+            read() {
+                let that = this;
+                const reader = new FileReader();
+                reader.onload = evt => {
+                    FileUtil.AnalysisFile(evt.target.result, this);
+                };
+                reader.readAsArrayBuffer(this.file);
+            }
+        }
+        class FileUtil {
+            static AnalysisFile(file, fileInstance) {
+                console.log(file)
+                var start = new Date().getTime();
+                // 将文件写入 Emscripten 虚拟文件系统
+                const data = new Uint8Array(file);
+                Module.FS_writeFile('/test.xlsx', data);
+                // 调用 C 函数读取
+                let index = Module.ccall('regist_excel', 'number', ['string'], ['/test.xlsx']);
+                console.log('regist_excel index', index);
+                console.log(index);
+                Module.ccall('get_headers', 'void', ['number'], [index]);
+                var end = new Date().getTime();
+                console.log('cost is', `${end - start}ms`);
+            };
+        }
+        class AppCore {
+            constructor() {
+                this.opened_file = new Array();
+                this.layui_table = null;
+            }
+            onOpenFile(file) {
+                console.log("On Open File", file);
+                this.opened_file.push(new FileInstance(file.name, file));
+                this.layui_table.reload('demo');
+            }
+        }
+        var core = new AppCore();
+    </script>
+    <!-- Layui Usage -->
+    <script>
+        // Usage
+        layui.use(function () {
+            var layer = layui.layer;
+            // Welcome
+            layer.msg("Hello World", { icon: 6 });
+        });
+    </script>
+    <script>
+
+        layui.use('table', function () {
+            var table = layui.table;
+            core.layui_table = table;
+            // 渲染表格
+            table.render({
+                elem: '#demo',
+                height: 312,
+                data: core.opened_file,
+                cols: [[
+                    // {field:'filepath', title:'文件路径', width:'auto'},
+                    { field: 'filename', title: '文件名', width: 'auto', sort: true }
+                ]],
+                page: false // 开启分页
+            });
+            // 绑定行点击事件
+            table.on('row(test)', function (data) {
+                // data是当前行的数据
+                console.log('你点击了', data);
+                data.dataCache.read();
+            });
+        });
+    </script>
+    <!-- Other -->
+    <script>
+        Module.onRuntimeInitialized = function () {
+            document.getElementById('fileInput').addEventListener('change', function (e) {
+                console.log(e);
+                const file = e.target.files[0];
+                core.onOpenFile(file);
+            });
+        };
+    </script>
+</body>
+
+</html>

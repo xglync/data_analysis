@@ -1,0 +1,8 @@
+build/*
+!build/data_analysis.js
+!build/data_analysis.wasm
+sdk/*
+design.md
+V1 CAT random_50mb.xlsx
+third_party/*/*
+!README*
