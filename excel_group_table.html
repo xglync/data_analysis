@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel 纯前端交互 (美化版)</title>
+    <script src="js/xlsx.full.min.js"></script>
+    <style>
+        /* --- 基础样式 --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            user-select: none;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            background-color: #409eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 14px;
+        }
+
+        .btn:hover {
+            background-color: #66b1ff;
+        }
+
+        .btn-green {
+            background-color: #67c23a;
+        }
+
+        .btn-green:hover {
+            background-color: #85ce61;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        select,
+        input {
+            padding: 8px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+        }
+
+        /* --- 手风琴容器 (修改了这里) --- */
+        .accordion-container {
+            /* 去掉了外层大边框，让每个 item 独立 */
+            background: transparent;
+        }
+
+        /* --- 单个分组项 (修改了这里：增加了间隔和圆角) --- */
+        .accordion-item {
+            background: white;
+            border: 1px solid #ebeef5;
+            /* 每个分组自带边框 */
+            border-radius: 4px;
+            /* 圆角 */
+            margin-bottom: 2px;
+            /* === 这里就是你要求的 2px 间隔 === */
+            overflow: hidden;
+            /* 保证圆角不被内部内容溢出遮挡 */
+            transition: box-shadow 0.2s;
+        }
+
+        .accordion-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+            /* 悬停时微微浮起 */
+        }
+
+        /* --- 标题行 --- */
+        .accordion-header {
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            background: #fff;
+            font-weight: 500;
+            border-bottom: 1px solid transparent;
+            /* 默认无底边框 */
+            transition: background-color 0.2s;
+        }
+
+        .accordion-header:hover {
+            background-color: #f9fafc;
+        }
+
+        .accordion-header.active {
+            background-color: #ecf5ff;
+            color: #409eff;
+            border-bottom: 1px solid #ebeef5;
+            /* 展开时加底边框区分内容 */
+        }
+
+        /* 新分组高亮动画 */
+        @keyframes highlightFade {
+            0% {
+                background-color: #e1f3d8;
+            }
+
+            100% {
+                background-color: #ecf5ff;
+            }
+        }
+
+        .accordion-header.new-group {
+            animation: highlightFade 2s ease-out;
+        }
+
+        /* --- 内容区域 (修改了这里：增加了缩进) --- */
+        .accordion-content {
+            display: none;
+            /* === 这里就是你要求的 内部表格缩进 === */
+            padding: 15px 30px 20px 30px;
+            /* 上 右 下 左 */
+            background-color: #fcfcfc;
+            /* 内容区背景稍微灰一点点，增加层次 */
+            overflow-x: auto;
+        }
+
+        /* --- 表格与选中样式 --- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 600px;
+            background: white;
+            /* 表格本身回退到白色 */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            /* 给表格加一点点投影，更像卡片中的卡片 */
+        }
+
+        th,
+        td {
+            padding: 10px 15px;
+            border: 1px solid #ebeef5;
+            text-align: left;
+            cursor: default;
+        }
+
+        th {
+            background-color: #f5f7fa;
+            color: #606266;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        tr.selected td {
+            background-color: #cce5ff !important;
+            border-color: #a3d3ff;
+        }
+
+        /* --- 右键菜单 --- */
+        #customContextMenu {
+            position: absolute;
+            z-index: 1000;
+            width: 180px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border-radius: 4px;
+            border: 1px solid #ebeef5;
+            padding: 5px 0;
+            display: none;
+        }
+
+        .menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #606266;
+        }
+
+        .menu-item:hover {
+            background-color: #ecf5ff;
+            color: #409eff;
+        }
+
+        .menu-item.danger {
+            color: #f56c6c;
+        }
+
+        .menu-item.danger:hover {
+            background-color: #fef0f0;
+        }
+
+        .menu-divider {
+            height: 1px;
+            background: #ebeef5;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 1. 顶部控制区 -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+            <h2>Excel 高级分组工具</h2>
+            <div class="btn-group">
+                <button class="btn" onclick="testAddExistingGroup()">测试: 加到现有组</button>
+                <button class="btn btn-green" onclick="testAddNewGroup()">测试: 创建新分组</button>
+            </div>
+        </div>
+
+        <div class="control-row">
+            <div><label>上传文件：</label><input type="file" id="fileInput" accept=".xlsx, .xls" /></div>
+            <div id="columnSelectArea" class="hidden"><label>分组列：</label><select id="columnSelect"></select></div>
+        </div>
+        <p id="statusMsg" style="color:#888; font-size:12px;">操作提示：左键点击单选，<b>Ctrl+点击</b>多选，拖拽可框选，右键删除。</p>
+    </div>
+
+    <!-- 2. 手风琴容器 -->
+    <div id="accordionList" class="accordion-container hidden"></div>
+
+    <!-- 3. 自定义右键菜单 -->
+    <div id="customContextMenu"></div>
+
+    <script>
+        // ==========================================
+        //   核心 API 逻辑 
+        // ==========================================
+        function sendMessageToParent(type, payload) {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: type, data: payload, source: 'excel-tool' }, '*');
+            }
+        }
+
+        window.ExcelAPI = {
+            addData: function (newRows) {
+                const rows = Array.isArray(newRows) ? newRows : [newRows];
+                if (rows.length === 0) return;
+
+                const colName = document.getElementById('columnSelect').value;
+                if (colName) {
+                    rows.forEach(row => {
+                        const key = row[colName] || '(空白)';
+                        if (!groupedData.hasOwnProperty(key)) {
+                            expandedGroups.add(key);
+                            newlyCreatedGroups.add(key);
+                        }
+                    });
+                }
+
+                globalData.push(...rows);
+                refreshView();
+                sendMessageToParent('data-added', { count: rows.length, rows: rows });
+                showStatus(`成功添加 ${rows.length} 条数据`);
+
+                setTimeout(() => { newlyCreatedGroups.clear(); }, 3000);
+            },
+
+            deleteData: function (rowsToDelete) {
+                if (!rowsToDelete || rowsToDelete.length === 0) return;
+                globalData = globalData.filter(item => !rowsToDelete.includes(item));
+                currentSelectedData = [];
+                refreshView();
+                sendMessageToParent('data-deleted', { count: rowsToDelete.length, rows: rowsToDelete });
+                showStatus(`成功删除 ${rowsToDelete.length} 条数据`);
+            },
+            postMessage: sendMessageToParent
+        };
+
+        const contextMenuConfig = [
+            {
+                label: "导出选中数据 (JSON)",
+                action: (selectedData) => {
+                    const json = JSON.stringify(selectedData, null, 2);
+                    console.log(json);
+                    alert("数据已打印到控制台，并发送给父窗口");
+                    window.ExcelAPI.postMessage('selection-export', selectedData);
+                }
+            },
+            { type: 'divider' },
+            {
+                label: "删除选中行",
+                className: "danger",
+                action: (selectedData) => {
+                    if (confirm(`确定删除 ${selectedData.length} 行吗？`)) {
+                        window.ExcelAPI.deleteData(selectedData);
+                    }
+                }
+            }
+        ];
+
+        // ==========================================
+        //   全局变量
+        // ==========================================
+        let globalData = [];
+        let groupedData = {};
+        let currentSelectedData = [];
+        let expandedGroups = new Set();
+        let newlyCreatedGroups = new Set();
+        let isDragging = false;
+        let startRowIndex = -1;
+        let currentGroupKey = null;
+
+        // ==========================================
+        //   基础逻辑
+        // ==========================================
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                globalData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+                if (globalData.length > 0) {
+                    initColumnSelector();
+                    showStatus(`已加载 ${globalData.length} 行数据`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function showStatus(msg) {
+            document.getElementById('statusMsg').innerText = msg;
+        }
+
+        function initColumnSelector() {
+            const headers = Object.keys(globalData[0]);
+            const select = document.getElementById('columnSelect');
+            const area = document.getElementById('columnSelectArea');
+            const oldVal = select.value;
+            select.innerHTML = '<option value="">-- 请选择 --</option>';
+            headers.forEach(h => select.add(new Option(h, h)));
+            if (oldVal) select.value = oldVal;
+            area.classList.remove('hidden');
+        }
+
+        document.getElementById('columnSelect').addEventListener('change', function () {
+            expandedGroups.clear();
+            newlyCreatedGroups.clear();
+            refreshView();
+        });
+
+        // ==========================================
+        //   核心视图刷新逻辑
+        // ==========================================
+        function refreshView() {
+            const colName = document.getElementById('columnSelect').value;
+            const container = document.getElementById('accordionList');
+            container.innerHTML = '';
+
+            if (!colName || globalData.length === 0) {
+                if (globalData.length === 0 && colName) container.innerHTML = '<div style="padding:20px;text-align:center">表格暂无数据</div>';
+                else container.classList.add('hidden');
+                return;
+            }
+
+            groupedData = {};
+            globalData.forEach(row => {
+                const key = row[colName] || '(空白)';
+                if (!groupedData[key]) groupedData[key] = [];
+                groupedData[key].push(row);
+            });
+
+            const sortedKeys = Object.keys(groupedData).sort();
+
+            sortedKeys.forEach(key => {
+                const groupRows = groupedData[key];
+                const item = document.createElement('div');
+                item.className = 'accordion-item';
+
+                const isExpanded = expandedGroups.has(key);
+                const isNew = newlyCreatedGroups.has(key);
+
+                const header = document.createElement('div');
+                header.className = `accordion-header ${isExpanded ? 'active' : ''} ${isNew ? 'new-group' : ''}`;
+                header.innerHTML = `
+                <span>${key} <span style="font-size:0.8em;color:#999;margin-left:5px;">(${groupRows.length})</span></span>
+                <span>▼</span>
+            `;
+
+                const content = document.createElement('div');
+                content.className = 'accordion-content';
+                content.style.display = isExpanded ? 'block' : 'none';
+                content.innerHTML = generateTableHTML(groupRows, key);
+
+                header.addEventListener('click', () => {
+                    const isActive = header.classList.toggle('active');
+                    content.style.display = isActive ? 'block' : 'none';
+                    if (isActive) expandedGroups.add(key); else expandedGroups.delete(key);
+                });
+
+                item.append(header, content);
+                container.append(item);
+            });
+            container.classList.remove('hidden');
+        }
+
+        function generateTableHTML(rows, groupKey) {
+            if (!rows.length) return '';
+            const headers = Object.keys(rows[0]);
+            let html = `<table data-group="${groupKey}"><thead><tr>`;
+            headers.forEach(h => html += `<th>${h}</th>`);
+            html += '</tr></thead><tbody>';
+            rows.forEach((row, idx) => {
+                html += `<tr data-index="${idx}">`;
+                headers.forEach(h => html += `<td>${row[h]}</td>`);
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+
+        // ==========================================
+        //   交互事件
+        // ==========================================
+        const contextMenu = document.getElementById('customContextMenu');
+        contextMenuConfig.forEach(item => {
+            if (item.type === 'divider') {
+                contextMenu.appendChild(document.createElement('div')).className = 'menu-divider';
+            } else {
+                const div = document.createElement('div');
+                div.className = `menu-item ${item.className || ''}`;
+                div.innerText = item.label;
+                div.addEventListener('click', () => {
+                    item.action(currentSelectedData);
+                    contextMenu.style.display = 'none';
+                });
+                contextMenu.appendChild(div);
+            }
+        });
+
+        document.addEventListener('click', () => contextMenu.style.display = 'none');
+        document.addEventListener('scroll', () => contextMenu.style.display = 'none', true);
+
+        const container = document.getElementById('accordionList');
+
+        container.addEventListener('mousedown', function (e) {
+            contextMenu.style.display = 'none';
+            const tr = e.target.closest('tr');
+            if (!tr || e.button !== 0) return;
+
+            const table = tr.closest('table');
+            const groupKey = table.dataset.group;
+            const rowIndex = parseInt(tr.dataset.index);
+
+            if (currentGroupKey && currentGroupKey !== groupKey) clearAllSelections();
+            currentGroupKey = groupKey;
+
+            // Ctrl 多选
+            if (e.ctrlKey || e.metaKey) {
+                tr.classList.toggle('selected');
+                syncSelectionFromDOM();
+                return;
+            }
+
+            clearAllSelections();
+            isDragging = true;
+            startRowIndex = rowIndex;
+            selectRange(table, startRowIndex, startRowIndex);
+            e.preventDefault();
+        });
+
+        container.addEventListener('mouseover', function (e) {
+            if (!isDragging) return;
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            const table = tr.closest('table');
+            if (table.dataset.group !== currentGroupKey) return;
+            selectRange(table, startRowIndex, parseInt(tr.dataset.index));
+        });
+
+        document.addEventListener('mouseup', () => isDragging = false);
+
+        container.addEventListener('contextmenu', function (e) {
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            e.preventDefault();
+
+            const table = tr.closest('table');
+            const groupKey = table.dataset.group;
+
+            if (!tr.classList.contains('selected')) {
+                clearAllSelections();
+                currentGroupKey = groupKey;
+                tr.classList.add('selected');
+                syncSelectionFromDOM();
+            }
+            contextMenu.style.left = `${e.pageX}px`;
+            contextMenu.style.top = `${e.pageY}px`;
+            contextMenu.style.display = 'block';
+        });
+
+        function selectRange(table, start, end) {
+            const rows = table.querySelectorAll('tbody tr');
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            rows.forEach((row, idx) => {
+                if (idx >= min && idx <= max) row.classList.add('selected');
+                else row.classList.remove('selected');
+            });
+            syncSelectionFromDOM();
+        }
+
+        function syncSelectionFromDOM() {
+            currentSelectedData = [];
+            if (!currentGroupKey) return;
+            const table = document.querySelector(`table[data-group="${currentGroupKey}"]`);
+            if (!table) return;
+            const sourceData = groupedData[currentGroupKey];
+            table.querySelectorAll('tbody tr').forEach((row, idx) => {
+                if (row.classList.contains('selected') && sourceData[idx]) {
+                    currentSelectedData.push(sourceData[idx]);
+                }
+            });
+            if (currentSelectedData.length > 0) showStatus(`选中 ${currentSelectedData.length} 行`);
+        }
+
+        function clearAllSelections() {
+            document.querySelectorAll('tr.selected').forEach(tr => tr.classList.remove('selected'));
+            currentSelectedData = [];
+        }
+
+        // ==========================================
+        //   测试函数
+        // ==========================================
+        function testAddExistingGroup() {
+            if (globalData.length === 0) { alert('请先上传文件'); return; }
+            const colName = document.getElementById('columnSelect').value;
+            if (!colName) { alert('请先选择分组列'); return; }
+
+            const keys = Object.keys(groupedData);
+            if (keys.length === 0) return;
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+
+            const template = { ...globalData[0] };
+            template[colName] = randomKey;
+            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (现有组)"; });
+
+            window.ExcelAPI.addData(template);
+        }
+
+        function testAddNewGroup() {
+            if (globalData.length === 0) { alert('请先上传文件'); return; }
+            const colName = document.getElementById('columnSelect').value;
+            if (!colName) { alert('请先选择分组列'); return; }
+
+            const template = { ...globalData[0] };
+            const newGroupName = "新业务部-" + Math.floor(Math.random() * 1000);
+            template[colName] = newGroupName;
+            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (新组)"; });
+
+            window.ExcelAPI.addData(template);
+        }
+    </script>
+
+</body>
+
+</html>
