@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel 纯前端交互 (美化版)</title>
-    <script src="js/xlsx.full.min.js"></script>
+    <title>Excel 纯前端 (自定义列显示版)</title>
+    <script src=js/xlsx.full.min.js"></script>
     <style>
         /* --- 基础样式 --- */
         body {
@@ -56,10 +56,6 @@
             background-color: #67c23a;
         }
 
-        .btn-green:hover {
-            background-color: #85ce61;
-        }
-
         .hidden {
             display: none !important;
         }
@@ -71,32 +67,30 @@
             border-radius: 4px;
         }
 
-        /* --- 手风琴容器 (修改了这里) --- */
+        .hint {
+            font-size: 12px;
+            color: #909399;
+            margin-top: 5px;
+        }
+
+        /* --- 手风琴样式 --- */
         .accordion-container {
-            /* 去掉了外层大边框，让每个 item 独立 */
             background: transparent;
         }
 
-        /* --- 单个分组项 (修改了这里：增加了间隔和圆角) --- */
         .accordion-item {
             background: white;
             border: 1px solid #ebeef5;
-            /* 每个分组自带边框 */
             border-radius: 4px;
-            /* 圆角 */
             margin-bottom: 2px;
-            /* === 这里就是你要求的 2px 间隔 === */
             overflow: hidden;
-            /* 保证圆角不被内部内容溢出遮挡 */
             transition: box-shadow 0.2s;
         }
 
         .accordion-item:hover {
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-            /* 悬停时微微浮起 */
         }
 
-        /* --- 标题行 --- */
         .accordion-header {
             padding: 15px 20px;
             cursor: pointer;
@@ -105,7 +99,6 @@
             background: #fff;
             font-weight: 500;
             border-bottom: 1px solid transparent;
-            /* 默认无底边框 */
             transition: background-color 0.2s;
         }
 
@@ -117,10 +110,8 @@
             background-color: #ecf5ff;
             color: #409eff;
             border-bottom: 1px solid #ebeef5;
-            /* 展开时加底边框区分内容 */
         }
 
-        /* 新分组高亮动画 */
         @keyframes highlightFade {
             0% {
                 background-color: #e1f3d8;
@@ -135,27 +126,21 @@
             animation: highlightFade 2s ease-out;
         }
 
-        /* --- 内容区域 (修改了这里：增加了缩进) --- */
         .accordion-content {
             display: none;
-            /* === 这里就是你要求的 内部表格缩进 === */
             padding: 15px 30px 20px 30px;
-            /* 上 右 下 左 */
             background-color: #fcfcfc;
-            /* 内容区背景稍微灰一点点，增加层次 */
             overflow-x: auto;
         }
 
-        /* --- 表格与选中样式 --- */
+        /* --- 表格样式 --- */
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
             min-width: 600px;
             background: white;
-            /* 表格本身回退到白色 */
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            /* 给表格加一点点投影，更像卡片中的卡片 */
         }
 
         th,
@@ -235,7 +220,11 @@
             <div><label>上传文件：</label><input type="file" id="fileInput" accept=".xlsx, .xls" /></div>
             <div id="columnSelectArea" class="hidden"><label>分组列：</label><select id="columnSelect"></select></div>
         </div>
-        <p id="statusMsg" style="color:#888; font-size:12px;">操作提示：左键点击单选，<b>Ctrl+点击</b>多选，拖拽可框选，右键删除。</p>
+        <div class="hint">
+            当前配置: <span id="configDisplay">显示所有列</span>
+        </div>
+        <p id="statusMsg" style="color:#888; font-size:12px; margin-top:10px;">操作提示：左键点击单选，<b>Ctrl+点击</b>多选，拖拽可框选，右键删除。
+        </p>
     </div>
 
     <!-- 2. 手风琴容器 -->
@@ -246,7 +235,16 @@
 
     <script>
         // ==========================================
-        //   核心 API 逻辑 
+        //   【配置区域】在这里设置显示的列
+        // ==========================================
+        const tableDisplayConfig = {
+            // columns: ["姓名", "部门", "工资"]  <-- 如果填了，只显示这三列，且按此顺序
+            // columns: []                       <-- 如果留空，显示 Excel 里所有列
+            columns: []
+        };
+
+        // ==========================================
+        //   核心 API
         // ==========================================
         function sendMessageToParent(type, payload) {
             if (window.parent && window.parent !== window) {
@@ -258,7 +256,6 @@
             addData: function (newRows) {
                 const rows = Array.isArray(newRows) ? newRows : [newRows];
                 if (rows.length === 0) return;
-
                 const colName = document.getElementById('columnSelect').value;
                 if (colName) {
                     rows.forEach(row => {
@@ -269,15 +266,12 @@
                         }
                     });
                 }
-
                 globalData.push(...rows);
                 refreshView();
                 sendMessageToParent('data-added', { count: rows.length, rows: rows });
                 showStatus(`成功添加 ${rows.length} 条数据`);
-
                 setTimeout(() => { newlyCreatedGroups.clear(); }, 3000);
             },
-
             deleteData: function (rowsToDelete) {
                 if (!rowsToDelete || rowsToDelete.length === 0) return;
                 globalData = globalData.filter(item => !rowsToDelete.includes(item));
@@ -286,17 +280,21 @@
                 sendMessageToParent('data-deleted', { count: rowsToDelete.length, rows: rowsToDelete });
                 showStatus(`成功删除 ${rowsToDelete.length} 条数据`);
             },
-            postMessage: sendMessageToParent
+            // 允许外部动态修改显示的列
+            updateColumnConfig: function (newColumns) {
+                tableDisplayConfig.columns = newColumns;
+                updateConfigDisplay();
+                refreshView();
+            }
         };
 
         const contextMenuConfig = [
             {
                 label: "导出选中数据 (JSON)",
                 action: (selectedData) => {
-                    const json = JSON.stringify(selectedData, null, 2);
-                    console.log(json);
-                    alert("数据已打印到控制台，并发送给父窗口");
                     window.ExcelAPI.postMessage('selection-export', selectedData);
+                    alert("数据已发送给父窗口，请查看控制台");
+                    console.log(selectedData);
                 }
             },
             { type: 'divider' },
@@ -312,7 +310,7 @@
         ];
 
         // ==========================================
-        //   全局变量
+        //   全局变量 & 初始化
         // ==========================================
         let globalData = [];
         let groupedData = {};
@@ -323,9 +321,8 @@
         let startRowIndex = -1;
         let currentGroupKey = null;
 
-        // ==========================================
-        //   基础逻辑
-        // ==========================================
+        updateConfigDisplay(); // 初始化显示配置状态
+
         document.getElementById('fileInput').addEventListener('change', function (e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -347,6 +344,18 @@
             document.getElementById('statusMsg').innerText = msg;
         }
 
+        function updateConfigDisplay() {
+            const el = document.getElementById('configDisplay');
+            if (tableDisplayConfig.columns && tableDisplayConfig.columns.length > 0) {
+                el.innerText = `仅显示: [${tableDisplayConfig.columns.join(', ')}]`;
+                el.style.color = "#409eff";
+            } else {
+                el.innerText = "显示所有列 (默认)";
+                el.style.color = "#909399";
+            }
+        }
+
+        // 初始化“分组”下拉框：这里依然列出所有列，因为分组依据和显示内容可以不同
         function initColumnSelector() {
             const headers = Object.keys(globalData[0]);
             const select = document.getElementById('columnSelect');
@@ -365,7 +374,7 @@
         });
 
         // ==========================================
-        //   核心视图刷新逻辑
+        //   核心渲染逻辑 (已应用列筛选)
         // ==========================================
         function refreshView() {
             const colName = document.getElementById('columnSelect').value;
@@ -397,10 +406,7 @@
 
                 const header = document.createElement('div');
                 header.className = `accordion-header ${isExpanded ? 'active' : ''} ${isNew ? 'new-group' : ''}`;
-                header.innerHTML = `
-                <span>${key} <span style="font-size:0.8em;color:#999;margin-left:5px;">(${groupRows.length})</span></span>
-                <span>▼</span>
-            `;
+                header.innerHTML = `<span>${key} <span style="font-size:0.8em;color:#999;margin-left:5px;">(${groupRows.length})</span></span><span>▼</span>`;
 
                 const content = document.createElement('div');
                 content.className = 'accordion-content';
@@ -419,15 +425,31 @@
             container.classList.remove('hidden');
         }
 
+        // --- 核心修改点：生成表格时应用配置 ---
         function generateTableHTML(rows, groupKey) {
             if (!rows.length) return '';
-            const headers = Object.keys(rows[0]);
+
+            // 1. 决定表头
+            let headers = [];
+            if (tableDisplayConfig.columns && tableDisplayConfig.columns.length > 0) {
+                // 如果配置了，就用配置的列
+                headers = tableDisplayConfig.columns;
+            } else {
+                // 否则用数据里的所有列
+                headers = Object.keys(rows[0]);
+            }
+
             let html = `<table data-group="${groupKey}"><thead><tr>`;
             headers.forEach(h => html += `<th>${h}</th>`);
             html += '</tr></thead><tbody>';
+
             rows.forEach((row, idx) => {
                 html += `<tr data-index="${idx}">`;
-                headers.forEach(h => html += `<td>${row[h]}</td>`);
+                headers.forEach(h => {
+                    // 如果配置的列在数据里不存在，显示空字符串
+                    const val = (row[h] !== undefined && row[h] !== null) ? row[h] : "";
+                    html += `<td>${val}</td>`;
+                });
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -435,7 +457,7 @@
         }
 
         // ==========================================
-        //   交互事件
+        //   交互事件 (拖拽 / Ctrl多选 / 右键)
         // ==========================================
         const contextMenu = document.getElementById('customContextMenu');
         contextMenuConfig.forEach(item => {
@@ -470,7 +492,6 @@
             if (currentGroupKey && currentGroupKey !== groupKey) clearAllSelections();
             currentGroupKey = groupKey;
 
-            // Ctrl 多选
             if (e.ctrlKey || e.metaKey) {
                 tr.classList.toggle('selected');
                 syncSelectionFromDOM();
@@ -555,11 +576,9 @@
             const keys = Object.keys(groupedData);
             if (keys.length === 0) return;
             const randomKey = keys[Math.floor(Math.random() * keys.length)];
-
             const template = { ...globalData[0] };
             template[colName] = randomKey;
-            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (现有组)"; });
-
+            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (test)"; });
             window.ExcelAPI.addData(template);
         }
 
@@ -567,14 +586,17 @@
             if (globalData.length === 0) { alert('请先上传文件'); return; }
             const colName = document.getElementById('columnSelect').value;
             if (!colName) { alert('请先选择分组列'); return; }
-
             const template = { ...globalData[0] };
-            const newGroupName = "新业务部-" + Math.floor(Math.random() * 1000);
+            const newGroupName = "Group-" + Math.floor(Math.random() * 1000);
             template[colName] = newGroupName;
-            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (新组)"; });
-
+            Object.keys(template).forEach(k => { if (k !== colName) template[k] += " (new)"; });
             window.ExcelAPI.addData(template);
         }
+
+        // ==========================================
+        //   使用示例：你可以在浏览器控制台输入以下代码来测试动态修改列
+        //   window.ExcelAPI.updateColumnConfig(["姓名", "电话"]);
+        // ==========================================
     </script>
 
 </body>
