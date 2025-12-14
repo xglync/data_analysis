@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Fixed Grid System</title>
+</head>
+
+<body style="margin:20px; font-family: sans-serif;">
+    <h3>Recursive Grid (Aligned & Source Tracking)</h3>
+    <div style="margin-bottom:10px; font-size:12px; color:#666;">
+        Check Console for Track logs with _widgetId.
+    </div>
+    <iframe id="gridFrame" src="widget.html" style="width: 100%; height: 600px; border: 1px solid #ccc;"></iframe>
+    <script>
+        const frame = document.getElementById('gridFrame');
+        const mainData = Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `Project ${i}`, budget: Math.floor(Math.random() * 100000) }));
+        const subDataPool = Array.from({ length: 5000 }, (_, i) => ({ sid: i, pid: i % 1000, task: `Task ${i}` }));
+
+        window.addEventListener('message', (e) => {
+            const { type, payload } = e.data;
+            if (type === 'READY') {
+                frame.contentWindow.postMessage({
+                    type: 'INIT',
+                    payload: {
+                        config: {
+                            primaryKeys: ['id'],
+                            selection: true,
+                            dragSelect: true,
+                            rowHeight: 40,
+
+                            style: {
+                                borderColor: '#d9d9d9',
+                                borderWidth: '1px',
+                                headerBg: '#f0f2f5',
+                                indentWidth: '50px'
+                            },
+
+                            globalContext: { pool: subDataPool },
+                            subWidget: {
+                                type: 'grid',
+                                height: 250,
+                                dataResolver: `return ctx.pool.filter(item => item.pid === row.id);`,
+                                config: {
+                                    primaryKeys: ['sid'],
+                                    selection: true,
+                                    dragSelect: true,
+                                    rowHeight: 35,
+                                    hideHeader: false,
+                                    columns: [
+                                        { field: 'task', title: 'Task Description', width: 250 },
+                                        { field: 'task', title: 'Task Description', width: 250 }
+                                    ]
+                                }
+                            },
+                            columns: [
+                                { field: 'id', title: 'ID', width: 60 },
+                                { field: 'name', title: 'Name', width: 200, editable: true },
+                                { field: 'budget', title: 'Budget', width: 120, formatter: 'currency' }
+                            ],
+                            customFormatters: [
+                                { name: 'currency', type: 'code', body: 'return "$" + value.toLocaleString()' }
+                            ],
+                            contextMenu: [{ label: 'Copy', action: 'copy' }]
+                        },
+                        data: mainData
+                    }
+                }, '*');
+            }
+            // 埋点日志，可以看到 _widgetId
+            if (type === 'TRACK') console.log('[TRACK]', payload.event, payload);
+        });
+    </script>
+</body>
+
+</html>
