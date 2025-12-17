@@ -1,255 +1,117 @@
-/**
- * grid.css
- * 表格核心样式文件
- * 设计原则：使用绝对定位配合虚拟滚动，使用 CSS 变量实现主题配置
- */
+/* css/grid.css */
 
-html,
-body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-    /* 统一字体栈 */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
-/* 定义默认 CSS 变量，可通过 JS applyStyles 动态覆盖 */
-:root {
-    --grid-border-color: #e0e0e0;
-    --grid-border-width: 1px;
-    --grid-header-bg: #f8f9fa;
-    --grid-row-hover-bg: #f8f9fa;
-    --grid-row-selected-bg: #e7f5ff;
-    --grid-cell-padding: 8px;
-    --indent-width: 50px;
-    /* 子控件缩进宽度 */
-    --header-height: 40px;
-    /* 统一管理表头高度 */
-}
-
-/* 
- * 表格主容器 
- * 相对定位，作为所有绝对定位子元素的参考坐标系
- */
 .grid-container {
     position: relative;
     height: 100%;
     width: 100%;
     overflow: auto;
-    /* 允许出现原生滚动条 */
-    border: var(--grid-border-width) solid var(--grid-border-color);
-    background: #fff;
+    border: var(--border-width) solid var(--border-color);
+    background: var(--bg-color);
     outline: none;
-    /* 全局禁止选中，避免拖拽框选时触发浏览器默认的文本选择 */
     user-select: none;
     -webkit-user-select: none;
 }
 
-/* 
- * 表头区域 
- * 使用 sticky 定位实现吸顶效果
- */
+/* ------ 表头 ------ */
 .grid-header {
     position: sticky;
     top: 0;
     z-index: 20;
-    /* 保证层级高于行内容(z-index:2)和子容器(z-index:1) */
     display: flex;
-    background: var(--grid-header-bg);
-    border-bottom: var(--grid-border-width) solid var(--grid-border-color);
+    background: #f8f9fa;
+    border-bottom: 2px solid var(--border-color);
     height: var(--header-height);
     box-sizing: border-box;
-    /* 宽度由 JS 动态计算，防止列宽总和小于容器时表头塌陷 */
+    min-width: 100%;
 }
 
-/* 表头单元格 */
 .grid-header-cell {
-    padding: 0 var(--grid-cell-padding);
+    padding: 0 8px;
     font-weight: 600;
     color: #495057;
     display: flex;
     align-items: center;
-    border-right: var(--grid-border-width) solid var(--grid-border-color);
+    border-right: var(--border-width) solid var(--border-color);
     box-sizing: border-box;
     overflow: hidden;
     white-space: nowrap;
     cursor: pointer;
-    /* 暗示可排序 */
-    /* 强制禁止 Flex 压缩，宽度完全由行内样式控制 */
     flex-shrink: 0;
-    flex-grow: 0;
 }
 
 .grid-header-cell:hover {
     background: #e9ecef;
 }
 
-/* 用于展开列的空表头，不需要排序手型 */
 .grid-header-cell.no-sort {
     cursor: default;
 }
 
-/* 
- * 虚拟滚动 - 幽灵层 
- * 这是一个不可见的层，仅用于撑开容器的高度，使原生滚动条滑块大小正确
- */
+/* ------ 内容区域 ------ */
 .grid-phantom {
     position: absolute;
     left: 0;
     top: var(--header-height);
-    /* 必须避开表头高度 */
     right: 0;
     z-index: -1;
 }
 
-/* 
- * 虚拟滚动 - 内容层 
- * 实际存放可见行 DOM 的容器
- */
 .grid-content {
     position: absolute;
     left: 0;
     right: 0;
     top: var(--header-height);
-    /* 内容从表头下方开始 */
     z-index: 1;
 }
 
-/* 
- * 行容器
- * 绝对定位，top 值由 VirtualScroller 计算
- */
 .grid-row {
     position: absolute;
     display: flex;
     box-sizing: border-box;
-    border-bottom: var(--grid-border-width) solid #f1f3f5;
+    border-bottom: var(--border-width) solid #f1f3f5;
     background: #fff;
     z-index: 2;
-    /* 盖住子控件容器(z-index:1)的上半部分 */
 }
 
 .grid-row:hover {
-    background-color: var(--grid-row-hover-bg);
+    background-color: var(--hover-bg);
 }
 
 .grid-row.selected {
-    background-color: var(--grid-row-selected-bg);
+    background-color: var(--selected-bg);
 }
 
-/* 展开状态：移除底边框，使视觉上与下方子控件连通 */
 .grid-row.expanded {
     border-bottom: none;
     background-color: #f1f3f5;
 }
 
-/* 单元格 */
 .grid-cell {
     display: flex;
     align-items: center;
-    padding: 0 var(--grid-cell-padding);
-    border-right: var(--grid-border-width) solid #f1f3f5;
+    padding: 0 8px;
+    border-right: var(--border-width) solid #f1f3f5;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
     box-sizing: border-box;
     height: 100%;
-    /* 强制宽度严格匹配表头 */
     flex-shrink: 0;
-    flex-grow: 0;
 }
 
 .grid-cell.editing {
     padding: 0;
-    /* 编辑时移除 padding 以便 input 充满 */
 }
 
-/* 输入框样式 */
 .grid-cell input {
     width: 100%;
     height: 100%;
-    border: 2px solid #339af0;
+    border: 2px solid #1890ff;
     padding: 0 6px;
     box-sizing: border-box;
     outline: none;
-    /* 关键：允许在输入框内选中文本，覆盖父容器的 user-select: none */
     user-select: text !important;
     -webkit-user-select: text !important;
     pointer-events: auto;
     cursor: text;
-}
-
-/* 展开/收起按钮 */
-.expand-btn {
-    cursor: pointer;
-    font-weight: bold;
-    color: #868e96;
-    width: 30px;
-    justify-content: center;
-}
-
-.expand-btn:hover {
-    color: #339af0;
-}
-
-/* 
- * 子控件挂载容器 
- * 位于行下方，具有缩进效果
- */
-.widget-container {
-    position: absolute;
-    left: 0;
-    right: 0;
-
-    /* 使用 border-left 实现缩进 */
-    /* 这里不能用 padding-left，否则内部 absolute 元素 left:0 会贴着边框而不是内容区 */
-    border-left: var(--indent-width) solid #fff;
-
-    background: #fff;
-    border-bottom: var(--grid-border-width) solid var(--grid-border-color);
-    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.03);
-    box-sizing: border-box;
-    z-index: 1;
-    /* 比 row 低，形成层次感 */
-    overflow: auto;
-    /* 允许子控件内容独立滚动 */
-}
-
-/* 
- * 交互组件 
- */
-/* 拖拽选框 */
-.selection-box {
-    position: absolute;
-    border: 1px solid #339af0;
-    background: rgba(51, 154, 240, 0.2);
-    pointer-events: none;
-    /* 必须穿透，否则 mouseup 事件无法触发 */
-    z-index: 9999;
-    display: none;
-}
-
-/* 右键菜单 */
-.context-menu {
-    position: fixed;
-    background: #fff;
-    border: 1px solid #ced4da;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 10000;
-    display: none;
-    border-radius: 4px;
-    padding: 4px 0;
-    min-width: 150px;
-}
-
-.context-menu-item {
-    padding: 8px 16px;
-    cursor: pointer;
-    color: #495057;
-    font-size: 14px;
-}
-
-.context-menu-item:hover {
-    background: #f1f3f5;
 }

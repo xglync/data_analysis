@@ -3,7 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
+    <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/grid.css">
+    <link rel="stylesheet" href="css/list.css">
     <style>
         html,
         body {
@@ -15,20 +17,39 @@
 </head>
 
 <body>
-    <div id="grid-root" class="grid-container"></div>
+    <div id="widget-root" class="grid-container"></div>
     <script type="module">
         import { MessageBus } from './js/core/message-bus.js';
-        import { Grid } from './js/core/grid.js';
+        import { widgetFactory } from './js/core/widget-factory.js';
+
         import './js/adapters/grid-adapter.js';
+        import './js/adapters/list-adapter.js';
+        // 【新增】引入 Quill 适配器
+        import './js/adapters/quill-adapter.js';
 
         const bus = new MessageBus();
-        // 根表格 ID 设为 'root'
-        const grid = new Grid('grid-root', bus, 'root');
 
         bus.on('INIT', ({ config, data }) => {
-            grid.init(config, data);
+            const root = document.getElementById('widget-root');
+            // 默认为 list 以适应本需求的场景，当然也可以配置驱动
+            const type = config.type || 'list';
+
+            const definition = {
+                type: type,
+                config: config,
+            };
+
+            const widget = widgetFactory.create(root, definition, null, null, bus, 'root');
+
+            if (widget && widget.init) {
+                widget.init(config, data);
+            }
         });
-        bus.on('SET_DATA', (data) => grid.dataEngine.loadData(data));
+
+        bus.on('SET_DATA', (data) => {
+            console.log("Data update received");
+        });
+
         bus.emit('READY', true);
     </script>
 </body>

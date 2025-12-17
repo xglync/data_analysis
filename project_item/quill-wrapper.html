@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Quill List Wrapper</title>
+    <style>
+        html,
+        body,
+        iframe {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <iframe id="innerWidget" src="widget.html"></iframe>
+
+    <script>
+        const iframe = document.getElementById('innerWidget');
+
+        window.addEventListener('message', (e) => {
+            const { type, payload } = e.data;
+
+            if (type === 'INIT_QUILL_LIST') {
+                const rawData = payload;
+
+                iframe.contentWindow.postMessage({
+                    type: 'INIT',
+                    payload: {
+                        config: {
+                            type: 'list',
+                            primaryKeys: ['id'],
+
+                            // 【关键配置】设置为 auto，启用高度自适应
+                            rowHeight: 'auto',
+                            // 预估高度，用于初始滚动条计算
+                            estimatedRowHeight: 200,
+
+                            // 仍然允许 overflow，但在 auto 模式下主要是容器撑大
+                            overflow: 'auto',
+
+                            itemWidget: {
+                                type: 'quill',
+                                dataResolver: `return row;`
+                            }
+                        },
+                        data: rawData
+                    }
+                }, '*');
+            }
+        });
+
+        window.addEventListener('message', (e) => {
+            const { type, payload } = e.data;
+
+            if (type === 'QUILL_UPDATED') {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'EDITOR_CHANGE',
+                        payload: payload
+                    }, '*');
+                }
+            }
+
+            if (type === 'READY') {
+                if (window.parent) window.parent.postMessage({ type: 'WRAPPER_READY' }, '*');
+            }
+        });
+    </script>
+</body>
+
+</html>

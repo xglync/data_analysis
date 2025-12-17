@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Grid Demo</title>
+</head>
+
+<body style="margin:20px; font-family: sans-serif;">
+    <h2>Grid Widget Demo</h2>
+    <p style="color:#666; font-size:14px;">Features: Virtual Scroll, Drag Select, Nested List Widget</p>
+
+    <!-- 引用通用的 widget.html -->
+    <iframe id="gridFrame" src="widget.html" style="width: 100%; height: 600px; border: 1px solid #ccc;"></iframe>
+
+    <script>
+        const frame = document.getElementById('gridFrame');
+
+        // 模拟数据
+        const mainData = Array.from({ length: 1000 }, (_, i) => ({
+            id: i,
+            name: `Project ${i}`,
+            budget: Math.floor(Math.random() * 100000),
+            status: i % 2 === 0 ? 'Active' : 'Closed'
+        }));
+
+        const subDataPool = Array.from({ length: 5000 }, (_, i) => ({
+            sid: i,
+            pid: i % 1000,
+            task: `Sub-task #${i} details...`,
+            time: new Date().toLocaleTimeString()
+        }));
+
+        window.addEventListener('message', (e) => {
+            const { type, payload } = e.data;
+            if (type === 'READY') {
+                frame.contentWindow.postMessage({
+                    type: 'INIT',
+                    payload: {
+                        config: {
+                            type: 'grid', // 指定根控件为 Grid
+                            primaryKeys: ['id'],
+                            selection: true,
+                            dragSelect: true,
+                            rowHeight: 40,
+
+                            style: {
+                                borderColor: '#ccc',
+                                indentWidth: '50px'
+                            },
+
+                            globalContext: { pool: subDataPool },
+
+                            // 子控件：使用 List
+                            subWidget: {
+                                type: 'list',
+                                height: 200,
+                                dataResolver: `return ctx.pool.filter(item => item.pid === row.id);`,
+                                config: {
+                                    rowHeight: 40,
+                                    // HTML 模板渲染
+                                    template: `
+                                        <div style="display:flex; align-items:center; width:100%;">
+                                            <span style="font-weight:bold; color:#1890ff; width:80px;">#\${row.sid}</span>
+                                            <span style="flex:1;">\${row.task}</span>
+                                            <span style="color:#999; font-size:12px;">\${row.time}</span>
+                                        </div>
+                                    `
+                                }
+                            },
+
+                            columns: [
+                                { field: 'id', title: 'ID', width: 60 },
+                                { field: 'name', title: 'Project Name', width: 200, editable: true },
+                                { field: 'budget', title: 'Budget', width: 120, formatter: 'currency' },
+                                { field: 'status', title: 'Status', width: 100 }
+                            ],
+
+                            customFormatters: [
+                                { name: 'currency', type: 'code', body: 'return "$" + value.toLocaleString()' }
+                            ],
+
+                            contextMenu: [{ label: 'Copy Row', action: 'copy' }]
+                        },
+                        data: mainData
+                    }
+                }, '*');
+            }
+            if (type === 'TRACK') console.log('[GRID TRACK]', payload.event, payload);
+        });
+    </script>
+</body>
+
+</html>
