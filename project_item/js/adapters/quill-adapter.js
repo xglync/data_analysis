@@ -1,5 +1,6 @@
 import { widgetFactory } from '../core/widget-factory.js';
 
+// Quill CDN 配置
 const QUILL_CSS = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
 const QUILL_JS = 'https://cdn.quilljs.com/1.3.6/quill.min.js';
 
@@ -10,7 +11,7 @@ class QuillAdapter {
         this.container = container;
         this.bus = messageBus;
         this.quill = null;
-        this.rowData = null;
+        this.rowData = null; // 这里持有 DataEngine 中某一行数据的引用
     }
 
     async loadResources() {
@@ -37,11 +38,11 @@ class QuillAdapter {
     }
 
     async init(config, data) {
+        // 保存数据引用
         this.rowData = data;
         await this.loadResources();
 
         // 1. 构建 DOM
-        // 外层 min-height: 100% (如果 List 给定高度则撑满，如果是 auto 则随内容)
         this.container.innerHTML = `
             <div style="display:flex; flex-direction:column; min-height:100%; padding: 10px; box-sizing: border-box;">
                 <div style="
@@ -76,21 +77,21 @@ class QuillAdapter {
             }
         });
 
-        // 3. 样式强制修正，允许高度撑开
+        // 3. 样式修正
         const qlContainer = this.container.querySelector('.ql-container');
         if (qlContainer) {
-            qlContainer.style.height = 'auto'; // 关键
+            qlContainer.style.height = 'auto';
             qlContainer.style.flex = '1';
             qlContainer.style.fontFamily = 'inherit';
         }
         const qlEditor = this.container.querySelector('.ql-editor');
         if (qlEditor) {
-            qlEditor.style.minHeight = '100px'; // 给一个最小高度
+            qlEditor.style.minHeight = '100px';
             qlEditor.style.height = 'auto';
             qlEditor.style.overflowY = 'visible';
         }
 
-        // 4. Set Content
+        // 4. 设置初始内容
         try {
             if (data.context) {
                 const delta = JSON.parse(data.context);
@@ -101,10 +102,17 @@ class QuillAdapter {
             this.quill.setText('Error loading content.');
         }
 
-        // 5. Change Listener
+        // 5. 监听变更
         this.quill.on('text-change', (delta, oldDelta, source) => {
             if (source === 'user') {
                 const currentContent = JSON.stringify(this.quill.getContents());
+
+                // 【核心修复】同步更新内存中的数据对象
+                // 因为 this.rowData 是引用类型，修改它会直接影响 DataEngine 里的数据
+                // 当虚拟滚动重新渲染此行时，会读取到更新后的 context
+                this.rowData.context = currentContent;
+
+                // 依然发送消息给父窗口（用于保存到数据库等操作）
                 if (this.bus) {
                     this.bus.emit('QUILL_UPDATED', {
                         duration: this.rowData.duration,

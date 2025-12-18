@@ -9,7 +9,8 @@ import { widgetFactory } from './widget-factory.js';
  * 1. 虚拟滚动：支持海量数据列表。
  * 2. 双模式渲染：Template 模式 / Widget 模式。
  * 3. 支持 overflow 内部滚动配置。
- * 4. [新增] 支持 rowHeight: 'auto'，配合 ResizeObserver 实现高度自适应。
+ * 4. 支持 rowHeight: 'auto'，配合 ResizeObserver 实现高度自适应。
+ * 5. [优化] 滚动时仅在渲染范围改变时重绘 DOM，防止编辑器失去焦点。
  */
 export class ListWidget {
     /**
@@ -28,7 +29,10 @@ export class ListWidget {
         this.scrollTop = 0;
         this.activeWidgets = new Map(); // Map<RowKey, Instance>
 
-        // [新增] 尺寸监听器，用于处理高度自适应
+        // 记录上一次渲染的范围，用于 Diff
+        this.prevRange = { start: -1, end: -1 };
+
+        // 尺寸监听器，用于处理高度自适应
         this.resizeObserver = new ResizeObserver((entries) => this.onEntriesResize(entries));
 
         this.initDOM();
@@ -39,7 +43,7 @@ export class ListWidget {
         this.config = config;
         this.dataEngine = new DataEngine(config);
 
-        // 如果配置是 'auto'，给 Scroller 一个预估高度 (如 50)，后续由 Observer 修正
+        // 如果配置是 'auto'，给 Scroller 一个预估高度
         const baseHeight = (config.rowHeight === 'auto') ? (config.estimatedRowHeight || 50) : config.rowHeight;
 
         this.scroller = new VirtualScroller({ rowHeight: baseHeight });
@@ -55,7 +59,8 @@ export class ListWidget {
             }
         }
 
-        this.refresh();
+        // 初始化时强制刷新
+        this.refresh(true);
 
         if (this.bus) this.bus.emit('TRACK', { event: 'LIST_INIT', payload: { id: this.id, count: data.length } });
     }
@@ -78,7 +83,7 @@ export class ListWidget {
         };
     }
 
-    // [新增] 处理高度变化
+    // 处理高度变化
     onEntriesResize(entries) {
         let needsUpdate = false;
 
@@ -99,17 +104,16 @@ export class ListWidget {
             }
         }
 
-        // 如果有高度变化，更新所有元素的位置（Top）和 Phantom 高度
-        // 注意：不调用 refresh()，因为 refresh 会重写 innerHTML 导致编辑器失去焦点
+        // 如果有高度变化，仅更新布局位置，不重绘 DOM
         if (needsUpdate) {
             this.updateLayoutOnly();
         }
     }
 
-    // [新增] 仅更新布局位置，不破坏 DOM
+    // 仅更新布局位置，不破坏 DOM
     updateLayoutOnly() {
         // 1. 重新计算所有偏移量
-        this.scroller._calc(); // 强制触发 Scroller 内部重算
+        this.scroller._calc();
 
         // 2. 更新 Phantom 高度
         this.els.phantom.style.height = `${this.scroller.totalHeight}px`;
@@ -123,15 +127,29 @@ export class ListWidget {
         }
     }
 
-    refresh() {
+    /**
+     * 刷新列表视图
+     * @param {boolean} force 是否强制重绘
+     */
+    refresh(force = false) {
         const viewportH = this.container.clientHeight || 400;
         this.scroller.updateMetrics(this.dataEngine.count, viewportH);
         const range = this.scroller.getRenderRange(this.scrollTop);
 
+        // 【关键修复】脏检查
+        // 如果非强制刷新，且渲染范围没有变化，直接跳过 DOM 重构
+        // 这保证了在长行内部滚动时，编辑器不会被销毁重建
+        if (!force && range.start === this.prevRange.start && range.end === this.prevRange.end) {
+            return;
+        }
+
+        // 更新缓存
+        this.prevRange = range;
+
         this.els.phantom.style.height = `${range.totalHeight}px`;
 
         this.cleanupWidgets(true);
-        // 渲染前断开观察，避免移除节点时触发回调
+        // 渲染前断开观察
         this.resizeObserver.disconnect();
 
         const overflowSetting = this.config.overflow || 'hidden';
@@ -144,19 +162,15 @@ export class ListWidget {
             const key = this.dataEngine.getCompositeKey(rowData);
             const top = this.scroller.getRowTop(i);
 
-            // 如果是 auto，不设置具体 height，让 CSS 决定，也不设置 overflow: hidden
             let style = `top:${top}px;`;
             if (!isAutoHeight) {
                 const height = this.scroller.getRowHeight(i);
                 style += `height:${height}px;`;
-            } else {
-                // auto 模式下，不需要显式 height，内容撑开
             }
 
             html += `<div class="list-item" style="${style}" data-key="${key}" data-idx="${i}">`;
 
             if (this.config.itemWidget) {
-                // 如果是 auto 模式，wrapper 不需要 height: 100%
                 const innerStyle = isAutoHeight
                     ? `width:100%; overflow:${overflowSetting};`
                     : wrapperStyle;
@@ -181,7 +195,7 @@ export class ListWidget {
 
         this.els.content.innerHTML = html;
 
-        // [新增] 渲染后，如果开启了 auto，需要观察所有新生成的节点
+        // 重新观察新节点
         if (isAutoHeight) {
             const items = this.els.content.children;
             for (let el of items) {
@@ -221,11 +235,8 @@ export class ListWidget {
         this.container.addEventListener('scroll', () => {
             requestAnimationFrame(() => {
                 this.scrollTop = this.container.scrollTop;
-                // 注意：在 auto 模式下，refresh 重绘会导致输入焦点丢失
-                // 但虚拟滚动必须重绘以回收 DOM。
-                // 只要滚动不剧烈导致当前编辑行移出视口，是不会触发重绘的。
-                // 如果需要更高级的“保留DOM”滚动，需要更复杂的 DOM 复用逻辑。
-                // 当前实现：滚动时正常 refresh。
+                // 滚动时调用 refresh，但在 refresh 内部会进行 range 检查
+                // 从而避免无效的 DOM 重绘
                 this.refresh();
             });
         });
