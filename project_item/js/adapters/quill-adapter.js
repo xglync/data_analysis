@@ -1,9 +1,8 @@
 import { widgetFactory } from '../core/widget-factory.js';
 
-// const QUILL_CSS = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
-const QUILL_CSS = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css';
-// const QUILL_JS = 'https://cdn.quilljs.com/1.3.6/quill.min.js';
-const QUILL_JS = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js';
+// 【修改】将资源路径指向本地目录
+const QUILL_CSS = 'js/thirdparty/quill/dist/quill.snow.css';
+const QUILL_JS = 'js/thirdparty/quill/dist/quill.js';
 
 let _quillResourcePromise = null;
 
