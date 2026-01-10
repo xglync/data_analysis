@@ -14,7 +14,7 @@
     <iframe id="gridFrame" src="widget.html" style="width: 100%; height: 600px; border: 1px solid #ccc;"></iframe>
     <script>
         const frame = document.getElementById('gridFrame');
-        const mainData = Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `Project ${i}`, budget: Math.floor(Math.random() * 100000) }));
+        const mainData = Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `Project ${i}`, budget: Math.floor(Math.random() * 100000), status: '1', info: '1' }));
         const subDataPool = Array.from({ length: 5000 }, (_, i) => ({ sid: i, pid: i % 1000, task: `Task ${i}` }));
 
         window.addEventListener('message', (e) => {
@@ -24,6 +24,7 @@
                     type: 'INIT',
                     payload: {
                         config: {
+                            type: 'grid', // 指定根控件为 Grid
                             primaryKeys: ['id'],
                             selection: true,
                             dragSelect: true,
@@ -55,8 +56,19 @@
                             },
                             columns: [
                                 { field: 'id', title: 'ID', width: 60 },
-                                { field: 'name', title: 'Name', width: 200, editable: true },
-                                { field: 'budget', title: 'Budget', width: 120, formatter: 'currency' }
+                                { field: 'name', title: 'Name', width: 200, editable: true, editor: { type: 'text' } },
+                                { field: 'budget', title: 'Budget', width: 120, formatter: 'currency' },
+                                {
+                                    field: 'status',
+                                    title: 'Status',
+                                    width: 120,
+                                    editable: true,
+                                    editor: {
+                                        type: 'select',
+                                        options: ['Active', 'Pending', 'Closed']
+                                    }
+                                },
+                                { field: 'info', title: 'info', width: 300, editable: true, editor: { type: 'textarea' } },
                             ],
                             customFormatters: [
                                 { name: 'currency', type: 'code', body: 'return "$" + value.toLocaleString()' }

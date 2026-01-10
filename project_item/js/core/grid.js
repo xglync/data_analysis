@@ -9,8 +9,8 @@ import { widgetFactory } from './widget-factory.js';
  */
 export class Grid {
     /**
-     * @param {string|HTMLElement} containerOrId 
-     * @param {MessageBus} messageBus 
+     * @param {string|HTMLElement} containerOrId
+     * @param {MessageBus} messageBus
      * @param {string} id 控件唯一ID
      */
     constructor(containerOrId, messageBus, id = 'root') {
@@ -167,7 +167,7 @@ export class Grid {
             const baseH = this.config.rowHeight || 40;
 
             // 渲染主行，强制设置 min-width 保证对齐
-            html += `<div class="grid-row ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}" 
+            html += `<div class="grid-row ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
                 style="top:${top}px; height:${baseH}px; min-width:${totalW}px;" data-idx="${i}" data-key="${key}">`;
 
             if (this.config.subWidget) {
@@ -193,7 +193,7 @@ export class Grid {
             if (isExpanded && this.config.subWidget) {
                 const subTop = top + baseH;
                 const subHeight = totalH - baseH;
-                html += `<div class="widget-container" id="widget-${key}" 
+                html += `<div class="widget-container" id="widget-${key}"
                     style="top:${subTop}px; height:${subHeight}px;"></div>`;
                 setTimeout(() => this.mountChild(key, rowData), 0);
             }
@@ -254,7 +254,7 @@ export class Grid {
 
         this.els.content.addEventListener('click', (e) => {
             if (this.isDragSelecting) return;
-            if (e.target.tagName === 'INPUT') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
             if (this.isChildWidgetEvent(e)) return;
 
             const row = e.target.closest('.grid-row');
@@ -286,14 +286,14 @@ export class Grid {
         this.els.content.addEventListener('dblclick', (e) => {
             if (this.isChildWidgetEvent(e)) return;
             const cell = e.target.closest('.grid-cell');
-            if (!cell || cell.querySelector('input')) return;
+            if (!cell || cell.classList.contains('editing')) return;
             const field = cell.dataset.field;
             const col = this.config.columns.find(c => c.field === field);
-            if (col && col.editable) this.startEdit(cell, field);
+            if (col && col.editable) this.startEdit(cell, field, col);
         });
 
         this.container.addEventListener('contextmenu', (e) => {
-            if (e.target.tagName === 'INPUT') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             if (this.isChildWidgetEvent(e)) return;
             if (e.target.closest('.grid-header')) return;
 
@@ -338,31 +338,123 @@ export class Grid {
         this.refresh();
     }
 
-    startEdit(cell, field) {
-        const val = cell.innerText;
+    startEdit(cell, field, col) {
         const row = cell.closest('.grid-row');
         const key = row.dataset.key;
+        const idx = this.dataEngine.idMap.get(key);
+        const originalVal = this.dataEngine.rawData[idx][field];
+
         this.emit('TRACK', { event: 'EDIT_START', payload: { key, field } });
 
         cell.classList.add('editing');
-        cell.innerHTML = `<input type="text" value="${val}">`;
-        const input = cell.querySelector('input');
-        input.focus(); input.select();
-        const close = () => {
+        const editorCfg = col.editor || { type: 'text' };
+
+        let editorEl;
+        switch (editorCfg.type) {
+            case 'textarea':
+                editorEl = document.createElement('textarea');
+                editorEl.value = originalVal || '';
+                break;
+            case 'date':
+                editorEl = document.createElement('input');
+                editorEl.type = 'date';
+                editorEl.value = originalVal || '';
+                break;
+            case 'datetime':
+                editorEl = document.createElement('input');
+                editorEl.type = 'datetime-local';
+                editorEl.value = originalVal || '';
+                break;
+            case 'select':
+                editorEl = document.createElement('select');
+                (editorCfg.options || []).forEach(opt => {
+                    const o = document.createElement('option');
+                    o.value = typeof opt === 'object' ? opt.value : opt;
+                    o.text = typeof opt === 'object' ? opt.label : opt;
+                    editorEl.appendChild(o);
+                });
+                editorEl.value = originalVal || '';
+                break;
+            case 'multi-select':
+                editorEl = this._createMultiSelectEditor(editorCfg.options, originalVal);
+                break;
+            default:
+                editorEl = document.createElement('input');
+                editorEl.type = 'text';
+                editorEl.value = originalVal || '';
+        }
+
+        cell.innerHTML = '';
+        cell.appendChild(editorEl);
+
+        const focusEl = editorCfg.type === 'multi-select' ? editorEl : editorEl;
+        focusEl.focus();
+        if (focusEl.select && editorCfg.type === 'text') focusEl.select();
+
+        const close = (isCancel = false) => {
             if (!cell.classList.contains('editing')) return;
-            const newVal = input.value;
-            cell.innerText = newVal;
+
+            let newVal = originalVal;
+            if (!isCancel) {
+                newVal = this._getEditorValue(editorEl, editorCfg);
+            }
+
             cell.classList.remove('editing');
-            const idx = this.dataEngine.idMap.get(key);
-            if (idx !== undefined) {
+
+            if (!isCancel && newVal !== originalVal) {
                 this.dataEngine.rawData[idx][field] = newVal;
                 this.emit('DATA_UPDATED', { key, field, value: newVal });
                 this.emit('TRACK', { event: 'EDIT_END', payload: { key, field, value: newVal } });
             }
+
+            // 刷新当前行显示 (由于是虚拟滚动，直接 refresh 比较稳妥)
+            this.refresh();
         };
-        input.onblur = close;
-        input.onkeydown = (e) => { if (e.key === 'Enter') close(); };
-        input.onclick = (e) => e.stopPropagation();
+
+        // 处理事件
+        if (editorCfg.type === 'multi-select') {
+            // 多选逻辑：点击外部关闭
+            const outerClick = (e) => {
+                if (!cell.contains(e.target)) {
+                    close();
+                    document.removeEventListener('mousedown', outerClick);
+                }
+            };
+            document.addEventListener('mousedown', outerClick);
+        } else {
+            editorEl.onblur = () => close();
+            editorEl.onkeydown = (e) => {
+                if (e.key === 'Enter' && editorCfg.type !== 'textarea') close();
+                if (e.key === 'Escape') close(true);
+            };
+        }
+
+        editorEl.onclick = (e) => e.stopPropagation();
+    }
+
+    _getEditorValue(el, cfg) {
+        if (cfg.type === 'multi-select') {
+            const checked = el.querySelectorAll('input:checked');
+            return Array.from(checked).map(i => i.value);
+        }
+        return el.value;
+    }
+
+    _createMultiSelectEditor(options = [], currentValues = []) {
+        const container = document.createElement('div');
+        container.className = 'multi-select-editor';
+        container.tabIndex = -1; // 使其可获焦
+
+        const vals = Array.isArray(currentValues) ? currentValues : [currentValues];
+
+        options.forEach(opt => {
+            const val = typeof opt === 'object' ? opt.value : opt;
+            const label = typeof opt === 'object' ? opt.label : opt;
+            const item = document.createElement('label');
+            item.innerHTML = `<input type="checkbox" value="${val}" ${vals.includes(val) ? 'checked' : ''}> ${label}`;
+            container.appendChild(item);
+        });
+        return container;
     }
 
     showContextMenu(x, y) {
@@ -392,7 +484,7 @@ export class Grid {
 
         const onDown = (e) => {
             if (e.button !== 0 || e.target.closest('.grid-header') || e.target.closest('.context-menu')) return;
-            if (e.target.tagName === 'INPUT') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
             if (this.isChildWidgetEvent(e)) return;
 
             e.stopPropagation();
