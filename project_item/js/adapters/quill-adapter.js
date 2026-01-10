@@ -44,12 +44,13 @@ class QuillAdapter {
         await this.loadResources();
 
         // 1. 构建 DOM
+        // 【修正】移除 min-height: 100%，让内容自然驱动容器高度
         this.container.innerHTML = `
-            <div style="display:flex; flex-direction:column; min-height:100%; padding: 10px; box-sizing: border-box;">
+            <div style="display:flex; flex-direction:column; padding: 10px; box-sizing: border-box;">
                 <div style="
-                    font-weight: bold; 
-                    color: #1890ff; 
-                    margin-bottom: 8px; 
+                    font-weight: bold;
+                    color: #1890ff;
+                    margin-bottom: 8px;
                     font-size: 14px;
                     padding-left: 8px;
                     border-left: 4px solid #1890ff;
@@ -82,7 +83,7 @@ class QuillAdapter {
         const qlContainer = this.container.querySelector('.ql-container');
         if (qlContainer) {
             qlContainer.style.height = 'auto';
-            qlContainer.style.flex = '1';
+            qlContainer.style.flex = 'none'; // 【修正】不强制填充，由内容撑开
             qlContainer.style.fontFamily = 'inherit';
         }
         const qlEditor = this.container.querySelector('.ql-editor');

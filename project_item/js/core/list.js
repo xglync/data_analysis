@@ -14,9 +14,9 @@ import { widgetFactory } from './widget-factory.js';
  */
 export class ListWidget {
     /**
-     * @param {HTMLElement} container 
-     * @param {MessageBus} messageBus 
-     * @param {string} id 
+     * @param {HTMLElement} container
+     * @param {MessageBus} messageBus
+     * @param {string} id
      */
     constructor(container, messageBus, id) {
         this.container = container;
@@ -122,8 +122,10 @@ export class ListWidget {
         const items = this.els.content.children;
         for (let el of items) {
             const idx = parseInt(el.dataset.idx);
-            const newTop = this.scroller.getRowTop(idx);
-            el.style.top = `${newTop}px`;
+            if (!isNaN(idx)) {
+                const newTop = this.scroller.getRowTop(idx);
+                el.style.top = `${newTop}px`;
+            }
         }
     }
 

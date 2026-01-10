@@ -42,8 +42,9 @@
                             // 预估高度，用于初始滚动条计算
                             estimatedRowHeight: 200,
 
-                            // 仍然允许 overflow，但在 auto 模式下主要是容器撑大
-                            overflow: 'auto',
+                            // 【关键修复】在 auto 模式下，关闭子容器的溢出隐藏
+                            // 确保滚轮事件能冒泡到 List 容器，从而触发虚拟滚动
+                            overflow: 'hidden',
 
                             itemWidget: {
                                 type: 'quill',

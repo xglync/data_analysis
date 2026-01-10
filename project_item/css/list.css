@@ -1,3 +1,4 @@
+--- START OF FILE list.css ---
 /* css/list.css */
 
 .list-container {
@@ -31,8 +32,10 @@
     border-bottom: 1px solid #eee;
     background: #fff;
     display: flex;
-    align-items: center;
-    padding: 0 16px;
+    align-items: flex-start;
+    /* 【修正】改为顶部对齐，适应变长内容 */
+    padding: 0;
+    /* 【修正】由子控件自行控制内边距，确保 ResizeObserver 计算精确 */
     transition: background 0.2s;
     cursor: default;
 }
