@@ -32,7 +32,9 @@ export class VirtualScroller {
         if (this.totalCount !== count) {
             this.totalCount = count;
             this.dirty = true;
-            this.heightMap.clear();
+            // 【重要修改】移除在此处的 clear()。
+            // 只有显式调用 resetHeights 时（如排序、彻底换数据）才清空，
+            // 否则在滚动时如果触发了 metrics 更新，会导致高度塌陷引发闪跳。
         }
     }
 
@@ -94,7 +96,7 @@ export class VirtualScroller {
         let end = start;
         let currentH = 0;
 
-        // 向下累加直到填满视口
+        // 向加累加直到填满视口
         while (end < this.totalCount && currentH < this.viewportHeight) {
             currentH += (this.heightMap.get(end) || this.baseRowHeight);
             end++;

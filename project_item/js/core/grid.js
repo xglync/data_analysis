@@ -9,8 +9,8 @@ import { widgetFactory } from './widget-factory.js';
  */
 export class Grid {
     /**
-     * @param {string|HTMLElement} containerOrId
-     * @param {MessageBus} messageBus
+     * @param {string|HTMLElement} containerOrId 
+     * @param {MessageBus} messageBus 
      * @param {string} id 控件唯一ID
      */
     constructor(containerOrId, messageBus, id = 'root') {
@@ -38,13 +38,21 @@ export class Grid {
     }
 
     init(config, data) {
+        // 检查配置是否有重大变化（列定义、主键等）
+        const isConfigChanged = JSON.stringify(this.config.columns) !== JSON.stringify(config.columns);
         this.config = config;
 
         // 应用自定义样式
         this.applyStyles(config.style);
 
-        this.dataEngine = new DataEngine(config);
-        this.scroller = new VirtualScroller({ rowHeight: config.rowHeight || 40 });
+        // 仅在首次或核心配置改变时初始化引擎
+        if (!this.dataEngine) {
+            this.dataEngine = new DataEngine(config);
+        }
+
+        if (!this.scroller) {
+            this.scroller = new VirtualScroller({ rowHeight: config.rowHeight || 40 });
+        }
 
         if (config.customFormatters) {
             config.customFormatters.forEach(cf => {
@@ -53,15 +61,23 @@ export class Grid {
             });
         }
 
+        // 载入数据：DataEngine 内部会处理索引更新
         this.dataEngine.loadData(data);
-        this.renderHeader();
+
+        // 如果列配置变了，重新渲染表头
+        if (isConfigChanged) {
+            this.renderHeader();
+        }
+
         this.initDragSelect();
         this.syncExpandedRows();
 
-        this.refresh();
+        // 刷新视图：refresh 内部会处理虚拟滚动的 metrics 更新
+        // 这里强制重绘一次以确保数据同步
+        this.refresh(true);
 
-        // [埋点] 初始化完成，携带 widgetId
-        this.emit('TRACK', { event: 'GRID_INIT', payload: { rowCount: data.length } });
+        // [埋点] 
+        this.emit('TRACK', { event: 'GRID_INIT', payload: { rowCount: data.length, soft: true } });
     }
 
     applyStyles(styleConfig) {
@@ -110,6 +126,7 @@ export class Grid {
             this.els.header.style.display = 'none';
             return;
         }
+        this.els.header.style.display = 'flex';
         let html = '';
         if (this.config.subWidget) {
             html += `<div class="grid-header-cell no-sort" style="width:40px; min-width:40px; max-width:40px;"></div>`;
@@ -131,20 +148,22 @@ export class Grid {
 
     syncExpandedRows() {
         if (this.expandedKeys.size === 0) return;
-        this.scroller.resetHeights();
+        // 注意：不调用 resetHeights() 以保留 Quill 的高度记录
         const count = this.dataEngine.count;
         const widgetH = (this.config.subWidget && this.config.subWidget.height) || 200;
-        const totalH = (this.config.rowHeight || 40) + widgetH;
+        const baseH = this.config.rowHeight || 40;
+        const expandedH = baseH + widgetH;
+
         for (let i = 0; i < count; i++) {
             const rowData = this.dataEngine.getRowByIndex(i);
             const key = this.dataEngine.getCompositeKey(rowData);
             if (this.expandedKeys.has(key)) {
-                this.scroller.setRowHeight(i, totalH);
+                this.scroller.setRowHeight(i, expandedH);
             }
         }
     }
 
-    refresh() {
+    refresh(force = false) {
         const viewportH = this.container.clientHeight || 500;
         this.scroller.updateMetrics(this.dataEngine.count, viewportH);
 
@@ -167,7 +186,7 @@ export class Grid {
             const baseH = this.config.rowHeight || 40;
 
             // 渲染主行，强制设置 min-width 保证对齐
-            html += `<div class="grid-row ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
+            html += `<div class="grid-row ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}" 
                 style="top:${top}px; height:${baseH}px; min-width:${totalW}px;" data-idx="${i}" data-key="${key}">`;
 
             if (this.config.subWidget) {
@@ -193,7 +212,7 @@ export class Grid {
             if (isExpanded && this.config.subWidget) {
                 const subTop = top + baseH;
                 const subHeight = totalH - baseH;
-                html += `<div class="widget-container" id="widget-${key}"
+                html += `<div class="widget-container" id="widget-${key}" 
                     style="top:${subTop}px; height:${subHeight}px;"></div>`;
                 setTimeout(() => this.mountChild(key, rowData), 0);
             }

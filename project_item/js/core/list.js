@@ -14,9 +14,9 @@ import { widgetFactory } from './widget-factory.js';
  */
 export class ListWidget {
     /**
-     * @param {HTMLElement} container
-     * @param {MessageBus} messageBus
-     * @param {string} id
+     * @param {HTMLElement} container 
+     * @param {MessageBus} messageBus 
+     * @param {string} id 
      */
     constructor(container, messageBus, id) {
         this.container = container;
@@ -40,14 +40,22 @@ export class ListWidget {
     }
 
     init(config, data) {
+        // 如果已经有 dataEngine 且主键配置未变，视为增量更新
+        const isSoftUpdate = !!this.dataEngine;
         this.config = config;
-        this.dataEngine = new DataEngine(config);
+
+        if (!this.dataEngine) {
+            this.dataEngine = new DataEngine(config);
+        }
 
         // 如果配置是 'auto'，给 Scroller 一个预估高度
         const baseHeight = (config.rowHeight === 'auto') ? (config.estimatedRowHeight || 50) : config.rowHeight;
 
-        this.scroller = new VirtualScroller({ rowHeight: baseHeight });
+        if (!this.scroller) {
+            this.scroller = new VirtualScroller({ rowHeight: baseHeight });
+        }
 
+        // loadData 会更新索引，但不会干扰 scroller 的 heightMap
         this.dataEngine.loadData(data);
 
         if (this.config.template && typeof this.config.template === 'string') {
@@ -59,10 +67,12 @@ export class ListWidget {
             }
         }
 
-        // 初始化时强制刷新
-        this.refresh(true);
+        // 如果是软更新，我们尝试不强制重绘整个 DOM，
+        // 除非数据量变了或者 range 变了。
+        // 这里为了保险，执行一次带 range 检查的 refresh
+        this.refresh(isSoftUpdate ? false : true);
 
-        if (this.bus) this.bus.emit('TRACK', { event: 'LIST_INIT', payload: { id: this.id, count: data.length } });
+        if (this.bus) this.bus.emit('TRACK', { event: 'LIST_INIT', payload: { id: this.id, count: data.length, soft: isSoftUpdate } });
     }
 
     destroy() {
@@ -90,6 +100,7 @@ export class ListWidget {
         for (const entry of entries) {
             const el = entry.target;
             const idx = parseInt(el.dataset.idx);
+            if (isNaN(idx)) continue;
 
             // 获取新的高度 (border-box)
             let newHeight = entry.borderBoxSize ? entry.borderBoxSize[0].blockSize : entry.contentRect.height;
@@ -235,10 +246,8 @@ export class ListWidget {
 
     bindEvents() {
         this.container.addEventListener('scroll', () => {
+            this.scrollTop = this.container.scrollTop;
             requestAnimationFrame(() => {
-                this.scrollTop = this.container.scrollTop;
-                // 滚动时调用 refresh，但在 refresh 内部会进行 range 检查
-                // 从而避免无效的 DOM 重绘
                 this.refresh();
             });
         });

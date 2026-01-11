@@ -28,26 +28,37 @@
         import './js/adapters/quill-adapter.js';
 
         const bus = new MessageBus();
+        let rootWidget = null;
 
         bus.on('INIT', ({ config, data }) => {
             const root = document.getElementById('widget-root');
-            // 默认为 list 以适应本需求的场景，当然也可以配置驱动
             const type = config.type || 'list';
+
+            // 【关键修复】如果已经初始化过，且类型一致，不要重新创建实例
+            // 重新创建会导致 DOM 被清空，滚动条直接回到顶部
+            if (rootWidget && rootWidget.id === 'root') {
+                console.log("Root widget exists, performing soft init/update.");
+                if (rootWidget.init) rootWidget.init(config, data);
+                return;
+            }
 
             const definition = {
                 type: type,
                 config: config,
             };
 
-            const widget = widgetFactory.create(root, definition, null, null, bus, 'root');
+            rootWidget = widgetFactory.create(root, definition, null, null, bus, 'root');
 
-            if (widget && widget.init) {
-                widget.init(config, data);
+            if (rootWidget && rootWidget.init) {
+                rootWidget.init(config, data);
             }
         });
 
         bus.on('SET_DATA', (data) => {
-            console.log("Data update received");
+            if (rootWidget && rootWidget.init) {
+                // 假设 init 逻辑支持增量或全量更新
+                rootWidget.init(rootWidget.config, data);
+            }
         });
 
         bus.emit('READY', true);
