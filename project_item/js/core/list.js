@@ -5,12 +5,7 @@ import { widgetFactory } from './widget-factory.js';
 /**
  * List Class
  * 通用列表控件。
- * 特性：
- * 1. 虚拟滚动：支持海量数据列表。
- * 2. 双模式渲染：Template 模式 / Widget 模式。
- * 3. 支持 overflow 内部滚动配置。
- * 4. 支持 rowHeight: 'auto'，配合 ResizeObserver 实现高度自适应。
- * 5. [优化] 滚动时仅在渲染范围改变时重绘 DOM，防止编辑器失去焦点。
+ * 修复：通过 DOM 增量更新防止超长元素滚动复位。
  */
 export class ListWidget {
     /**
@@ -27,7 +22,10 @@ export class ListWidget {
         this.dataEngine = null;
         this.scroller = null;
         this.scrollTop = 0;
+
+        // 核心状态存储
         this.activeWidgets = new Map(); // Map<RowKey, Instance>
+        this.domMap = new Map();       // Map<RowKey, HTMLElement> 存储当前在 DOM 中的节点
 
         // 记录上一次渲染的范围，用于 Diff
         this.prevRange = { start: -1, end: -1 };
@@ -40,7 +38,6 @@ export class ListWidget {
     }
 
     init(config, data) {
-        // 如果已经有 dataEngine 且主键配置未变，视为增量更新
         const isSoftUpdate = !!this.dataEngine;
         this.config = config;
 
@@ -48,14 +45,12 @@ export class ListWidget {
             this.dataEngine = new DataEngine(config);
         }
 
-        // 如果配置是 'auto'，给 Scroller 一个预估高度
         const baseHeight = (config.rowHeight === 'auto') ? (config.estimatedRowHeight || 50) : config.rowHeight;
 
         if (!this.scroller) {
             this.scroller = new VirtualScroller({ rowHeight: baseHeight });
         }
 
-        // loadData 会更新索引，但不会干扰 scroller 的 heightMap
         this.dataEngine.loadData(data);
 
         if (this.config.template && typeof this.config.template === 'string') {
@@ -67,9 +62,6 @@ export class ListWidget {
             }
         }
 
-        // 如果是软更新，我们尝试不强制重绘整个 DOM，
-        // 除非数据量变了或者 range 变了。
-        // 这里为了保险，执行一次带 range 检查的 refresh
         this.refresh(isSoftUpdate ? false : true);
 
         if (this.bus) this.bus.emit('TRACK', { event: 'LIST_INIT', payload: { id: this.id, count: data.length, soft: isSoftUpdate } });
@@ -78,6 +70,7 @@ export class ListWidget {
     destroy() {
         this.resizeObserver.disconnect();
         this.cleanupWidgets(true);
+        this.domMap.clear();
         this.container.innerHTML = '';
     }
 
@@ -93,172 +86,147 @@ export class ListWidget {
         };
     }
 
-    // 处理高度变化
     onEntriesResize(entries) {
         let needsUpdate = false;
-
         for (const entry of entries) {
             const el = entry.target;
             const idx = parseInt(el.dataset.idx);
             if (isNaN(idx)) continue;
-
-            // 获取新的高度 (border-box)
             let newHeight = entry.borderBoxSize ? entry.borderBoxSize[0].blockSize : entry.contentRect.height;
-
-            // 获取 Scroller 记录的旧高度
             const oldHeight = this.scroller.getRowHeight(idx);
-
-            // 如果高度发生实质变化
             if (Math.abs(newHeight - oldHeight) > 1) {
                 this.scroller.setRowHeight(idx, newHeight);
                 needsUpdate = true;
             }
         }
-
-        // 如果有高度变化，仅更新布局位置，不重绘 DOM
         if (needsUpdate) {
-            this.updateLayoutOnly();
+            requestAnimationFrame(() => this.updateLayoutOnly());
         }
     }
 
-    // 仅更新布局位置，不破坏 DOM
     updateLayoutOnly() {
-        // 1. 重新计算所有偏移量
         this.scroller._calc();
-
-        // 2. 更新 Phantom 高度
         this.els.phantom.style.height = `${this.scroller.totalHeight}px`;
-
-        // 3. 遍历当前 DOM 节点，更新 top
-        const items = this.els.content.children;
-        for (let el of items) {
+        // 更新所有在场 DOM 的位置
+        this.domMap.forEach((el, key) => {
             const idx = parseInt(el.dataset.idx);
             if (!isNaN(idx)) {
-                const newTop = this.scroller.getRowTop(idx);
-                el.style.top = `${newTop}px`;
+                el.style.top = `${this.scroller.getRowTop(idx)}px`;
             }
-        }
+        });
+        // 【关键】高度变化可能导致渲染范围变化，触发一次 refresh
+        this.refresh();
     }
 
     /**
-     * 刷新列表视图
-     * @param {boolean} force 是否强制重绘
+     * 刷新列表视图 (增量 Diff 模式)
      */
     refresh(force = false) {
         const viewportH = this.container.clientHeight || 400;
         this.scroller.updateMetrics(this.dataEngine.count, viewportH);
-        const range = this.scroller.getRenderRange(this.scrollTop);
 
-        // 【关键修复】脏检查
-        // 如果非强制刷新，且渲染范围没有变化，直接跳过 DOM 重构
-        // 这保证了在长行内部滚动时，编辑器不会被销毁重建
+        const currentScrollTop = this.container.scrollTop;
+        const range = this.scroller.getRenderRange(currentScrollTop);
+
         if (!force && range.start === this.prevRange.start && range.end === this.prevRange.end) {
             return;
         }
 
-        // 更新缓存
         this.prevRange = range;
-
         this.els.phantom.style.height = `${range.totalHeight}px`;
 
-        this.cleanupWidgets(true);
-        // 渲染前断开观察
-        this.resizeObserver.disconnect();
-
+        const isAutoHeight = this.config.rowHeight === 'auto';
         const overflowSetting = this.config.overflow || 'hidden';
         const wrapperStyle = `width:100%; height:100%; overflow:${overflowSetting};`;
-        const isAutoHeight = this.config.rowHeight === 'auto';
 
-        let html = '';
+        // 1. 计算当前应该存在的 Keys
+        const visibleKeys = new Set();
         for (let i = range.start; i < range.end; i++) {
             const rowData = this.dataEngine.getRowByIndex(i);
             const key = this.dataEngine.getCompositeKey(rowData);
-            const top = this.scroller.getRowTop(i);
+            visibleKeys.add(key);
 
-            let style = `top:${top}px;`;
-            if (!isAutoHeight) {
-                const height = this.scroller.getRowHeight(i);
-                style += `height:${height}px;`;
+            // 2. 如果节点不在 DOM 中，创建并添加
+            if (!this.domMap.has(key)) {
+                const top = this.scroller.getRowTop(i);
+                const itemEl = document.createElement('div');
+                itemEl.className = 'list-item';
+                itemEl.dataset.key = key;
+                itemEl.dataset.idx = i;
+
+                let style = `top:${top}px;`;
+                if (!isAutoHeight) {
+                    style += `height:${this.scroller.getRowHeight(i)}px;`;
+                }
+                itemEl.style.cssText = style;
+
+                // 渲染内容
+                if (this.config.itemWidget) {
+                    const innerStyle = isAutoHeight ? `width:100%; overflow:${overflowSetting};` : wrapperStyle;
+                    itemEl.innerHTML = `<div class="list-item-widget-wrapper" id="list-widget-${key}" style="${innerStyle}"></div>`;
+                    setTimeout(() => this.mountItemWidget(key, rowData), 0);
+                } else if (this.renderFn) {
+                    const innerStyle = isAutoHeight ? `width:100%; overflow:${overflowSetting};` : wrapperStyle;
+                    let html = `<div class="list-item-content-wrapper" style="${innerStyle}">`;
+                    html += this.renderFn(rowData, i);
+                    html += `</div>`;
+                    itemEl.innerHTML = html;
+                } else {
+                    itemEl.innerHTML = `<span>${JSON.stringify(rowData)}</span>`;
+                }
+
+                this.els.content.appendChild(itemEl);
+                this.domMap.set(key, itemEl);
+                if (isAutoHeight) this.resizeObserver.observe(itemEl);
+            } else {
+                // 3. 节点已存在，仅更新位置
+                const itemEl = this.domMap.get(key);
+                itemEl.style.top = `${this.scroller.getRowTop(i)}px`;
+                itemEl.dataset.idx = i;
             }
-
-            html += `<div class="list-item" style="${style}" data-key="${key}" data-idx="${i}">`;
-
-            if (this.config.itemWidget) {
-                const innerStyle = isAutoHeight
-                    ? `width:100%; overflow:${overflowSetting};`
-                    : wrapperStyle;
-
-                html += `<div class="list-item-widget-wrapper" id="list-widget-${key}" style="${innerStyle}"></div>`;
-                setTimeout(() => this.mountItemWidget(key, rowData), 0);
-            }
-            else if (this.renderFn) {
-                const innerStyle = isAutoHeight
-                    ? `width:100%; overflow:${overflowSetting};`
-                    : wrapperStyle;
-                html += `<div class="list-item-content-wrapper" style="${innerStyle}">`;
-                html += this.renderFn(rowData, i);
-                html += `</div>`;
-            }
-            else {
-                html += `<span>${JSON.stringify(rowData)}</span>`;
-            }
-
-            html += `</div>`;
         }
 
-        this.els.content.innerHTML = html;
-
-        // 重新观察新节点
-        if (isAutoHeight) {
-            const items = this.els.content.children;
-            for (let el of items) {
-                this.resizeObserver.observe(el);
+        // 4. 移除不在范围内的 Keys
+        this.domMap.forEach((el, key) => {
+            if (!visibleKeys.has(key)) {
+                const widget = this.activeWidgets.get(key);
+                if (widget && widget.destroy) widget.destroy();
+                this.activeWidgets.delete(key);
+                this.resizeObserver.unobserve(el);
+                el.remove();
+                this.domMap.delete(key);
             }
-        }
+        });
     }
 
     mountItemWidget(key, rowData) {
         const container = this.container.querySelector(`#list-widget-${key}`);
         if (!container || this.activeWidgets.has(key)) return;
-
         const childId = `${this.id}:item-${key}`;
-
-        const instance = widgetFactory.create(
-            container,
-            this.config.itemWidget,
-            rowData,
-            this.config.globalContext,
-            this.bus,
-            childId
-        );
-
-        if (instance) {
-            this.activeWidgets.set(key, instance);
-        }
+        const instance = widgetFactory.create(container, this.config.itemWidget, rowData, this.config.globalContext, this.bus, childId);
+        if (instance) this.activeWidgets.set(key, instance);
     }
 
     cleanupWidgets(all) {
         if (all) {
             this.activeWidgets.forEach(w => w.destroy && w.destroy());
             this.activeWidgets.clear();
+            this.domMap.forEach(el => el.remove());
+            this.domMap.clear();
         }
     }
 
     bindEvents() {
         this.container.addEventListener('scroll', () => {
             this.scrollTop = this.container.scrollTop;
-            requestAnimationFrame(() => {
-                this.refresh();
-            });
-        });
+            requestAnimationFrame(() => this.refresh());
+        }, { passive: true });
 
         this.els.content.addEventListener('click', (e) => {
             const item = e.target.closest('.list-item');
             if (!item) return;
-
             const idx = parseInt(item.dataset.idx);
             const rowData = this.dataEngine.getRowByIndex(idx);
-
             if (this.bus) {
                 this.bus.emit('LIST_ITEM_CLICK', {
                     id: this.id,

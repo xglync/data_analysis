@@ -32,9 +32,6 @@ export class VirtualScroller {
         if (this.totalCount !== count) {
             this.totalCount = count;
             this.dirty = true;
-            // 【重要修改】移除在此处的 clear()。
-            // 只有显式调用 resetHeights 时（如排序、彻底换数据）才清空，
-            // 否则在滚动时如果触发了 metrics 更新，会导致高度塌陷引发闪跳。
         }
     }
 
@@ -71,6 +68,7 @@ export class VirtualScroller {
      */
     _findIdx(offset) {
         if (this.totalCount === 0) return 0;
+        if (offset <= 0) return 0;
         let low = 0, high = this.totalCount - 1, res = 0;
 
         while (low <= high) {
@@ -88,23 +86,34 @@ export class VirtualScroller {
     /**
      * 根据 scrollTop 计算可见行范围
      */
-    getRenderRange(scrollTop, buffer = 2) {
+    getRenderRange(scrollTop, buffer = 3) {
         this._calc();
         if (this.totalCount === 0) return { start: 0, end: 0, totalHeight: 0 };
 
+        // 找到第一个可见行的索引
         const start = this._findIdx(scrollTop);
-        let end = start;
-        let currentH = 0;
 
-        // 向加累加直到填满视口
-        while (end < this.totalCount && currentH < this.viewportHeight) {
-            currentH += (this.heightMap.get(end) || this.baseRowHeight);
+        let end = start;
+        const viewportBottom = scrollTop + this.viewportHeight;
+
+        // 【核心修复】逻辑修正：
+        // 我们需要渲染直到某个元素的底部超过了视口的底部。
+        // 这样即使 start 是一个超长元素，它也会强制包含至少一个在它下方的元素。
+        while (end < this.totalCount) {
+            const h = this.heightMap.get(end) || this.baseRowHeight;
+            const itemBottom = this.offsets[end] + h;
             end++;
+            // 如果当前元素的底部已经超过了视口底部，则停止
+            if (itemBottom >= viewportBottom) break;
         }
 
+        // 应用 Buffer 扩展
+        const finalStart = Math.max(0, start - buffer);
+        const finalEnd = Math.min(this.totalCount, end + buffer);
+
         return {
-            start: Math.max(0, start - buffer),
-            end: Math.min(this.totalCount, end + buffer),
+            start: finalStart,
+            end: finalEnd,
             totalHeight: this.totalHeight
         };
     }
