@@ -1,6 +1,5 @@
 /* css/base.css */
 
-/* ------ 基础重置与变量 ------ */
 html,
 body {
     margin: 0;
@@ -11,23 +10,17 @@ body {
 }
 
 :root {
-    /* 边框与背景 */
-    --border-color: #e0e0e0;
-    --border-width: 1px;
-    --bg-color: #fff;
+    --grid-border-color: #e0e0e0;
+    --grid-border-width: 1px;
+    --grid-header-bg: #f8f9fa;
+    --grid-header-height: 40px;
+    --indent-width: 60px;
+    /* 默认缩进宽度 */
 
-    /* 交互色 */
     --hover-bg: #f8f9fa;
     --selected-bg: #e7f5ff;
-
-    /* 尺寸 */
-    --header-height: 40px;
-    --indent-width: 50px;
 }
 
-/* ------ 公共交互组件 ------ */
-
-/* 拖拽选框 */
 .selection-box {
     position: absolute;
     border: 1px solid #1890ff;
@@ -37,12 +30,11 @@ body {
     display: none;
 }
 
-/* 右键菜单 */
 .context-menu {
     position: fixed;
     background: #fff;
     border: 1px solid #ced4da;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 10000;
     display: none;
     border-radius: 4px;
@@ -61,32 +53,28 @@ body {
     background: #f1f3f5;
 }
 
-/* 展开/收起按钮 (Grid 和 List 可能通用) */
 .expand-btn {
     cursor: pointer;
     font-weight: bold;
     color: #868e96;
-    width: 30px;
+    width: 40px;
+    /* 与 header/cell 宽度对齐 */
     display: flex;
     justify-content: center;
     align-items: center;
+    user-select: none;
 }
 
 .expand-btn:hover {
     color: #1890ff;
 }
 
-/* 子控件挂载容器 (通用) */
+/* 子控件容器：由 JS 控制定位、高度和缩进 */
 .widget-container {
     position: absolute;
     left: 0;
-    right: 0;
-    border-left: var(--indent-width) solid #fff;
-    /* 缩进 */
+    z-index: 3;
     background: #fff;
-    border-bottom: var(--border-width) solid var(--border-color);
-    box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.05);
-    box-sizing: border-box;
-    z-index: 1;
-    overflow: auto;
+    display: block;
+    box-sizing: border-box !important;
 }

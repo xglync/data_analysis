@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Grid Nested in Grid Demo</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: -apple-system, sans-serif;
+            background: #f0f2f5;
+        }
+
+        .info-panel {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 4px;
+            color: #003a8c;
+            font-size: 14px;
+        }
+
+        .frame-wrapper {
+            border: 1px solid #d9d9d9;
+            background: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        iframe {
+            width: 100%;
+            height: 750px;
+            border: none;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Recursive Grid Demo (Grid in Grid)</h2>
+    <div class="info-panel">
+        <strong>Architecture:</strong> The root widget is a <b>Grid</b>. Its sub-component is also a <b>Grid</b>.
+        Both support Virtual Scrolling, Independent Sorting, and Inline Editing.
+        Check the console to see <code>_widgetId</code> tracking for nested events.
+    </div>
+
+    <div class="frame-wrapper">
+        <iframe id="recursiveGridFrame" src="widget.html"></iframe>
+    </div>
+
+    <script>
+        const frame = document.getElementById('recursiveGridFrame');
+
+        // 1. 部门数据 (主表)
+        const departments = [
+            { id: 'D01', name: 'Engineering', manager: 'Alice Wang', budget: 500000, location: 'Building A' },
+            { id: 'D02', name: 'Product Design', manager: 'Bob Chen', budget: 250000, location: 'Building B' },
+            { id: 'D03', name: 'Marketing', manager: 'Charlie Liu', budget: 300000, location: 'Building A' },
+            { id: 'D04', name: 'Customer Success', manager: 'David Zhang', budget: 150000, location: 'Building C' },
+            { id: 'D05', name: 'Human Resources', manager: 'Eve Zhao', budget: 100000, location: 'Building B' }
+        ];
+
+        // 2. 员工数据池 (子表)
+        const employeePool = Array.from({ length: 100 }, (_, i) => {
+            const deptIds = ['D01', 'D02', 'D03', 'D04', 'D05'];
+            return {
+                eid: `E${1000 + i}`,
+                deptId: deptIds[i % 5],
+                name: `Employee_${i}`,
+                role: i % 3 === 0 ? 'Senior' : 'Junior',
+                joinDate: new Date(2020, 0, i + 1).toISOString().split('T')[0],
+                status: Math.random() > 0.2 ? 'Onsite' : 'Remote'
+            };
+        });
+
+        window.addEventListener('message', (e) => {
+            const { type, payload } = e.data;
+
+            if (type === 'READY') {
+                frame.contentWindow.postMessage({
+                    type: 'INIT',
+                    payload: {
+                        config: {
+                            type: 'grid',
+                            primaryKeys: ['id'],
+                            selection: true,
+                            dragSelect: true,
+                            rowHeight: 40,
+
+                            style: {
+                                borderColor: '#d9d9d9',
+                                headerBg: '#fafafa',
+                                indentWidth: '50px'
+                            },
+
+                            globalContext: { pool: employeePool },
+
+                            // 【核心配置】子组件也是一个 Grid
+                            subWidget: {
+                                type: 'grid',
+                                height: 300,
+                                // 根据父行 id 过滤员工
+                                dataResolver: `return ctx.pool.filter(emp => emp.deptId === row.id);`,
+                                config: {
+                                    primaryKeys: ['eid'],
+                                    selection: true,
+                                    rowHeight: 35,
+                                    // 子表格的列定义
+                                    columns: [
+                                        { field: 'eid', title: 'Emp ID', width: 80 },
+                                        { field: 'name', title: 'Full Name', width: 150, editable: true },
+                                        {
+                                            field: 'role', title: 'Role', width: 100,
+                                            editable: true,
+                                            editor: { type: 'select', options: ['Senior', 'Junior', 'Intern'] }
+                                        },
+                                        { field: 'joinDate', title: 'Join Date', width: 120, editable: true, editor: { type: 'date' } },
+                                        {
+                                            field: 'status', title: 'Work Mode', width: 100,
+                                            editable: true,
+                                            editor: { type: 'select', options: ['Onsite', 'Remote', 'Hybrid'] }
+                                        }
+                                    ]
+                                }
+                            },
+
+                            // 主表格列定义
+                            columns: [
+                                { field: 'id', title: 'Dept ID', width: 80 },
+                                { field: 'name', title: 'Department Name', width: 200, editable: true },
+                                { field: 'manager', title: 'Manager', width: 150, editable: true },
+                                { field: 'budget', title: 'Budget', width: 120, formatter: 'currency' },
+                                { field: 'location', title: 'Location', width: 120 }
+                            ],
+
+                            customFormatters: [
+                                { name: 'currency', type: 'code', body: 'return "¥" + value.toLocaleString()' }
+                            ],
+                            contextMenu: [{ label: 'Export Department', action: 'export' }]
+                        },
+                        data: departments
+                    }
+                }, '*');
+            }
+
+            // 监听编辑和追踪消息
+            if (type === 'DATA_UPDATED') {
+                console.log(`%c[Update from ${payload._widgetId}]`, 'color: #1890ff; font-weight: bold', payload);
+            }
+            if (type === 'TRACK') {
+                console.log(`[Track][${payload._widgetId}] ${payload.event}`, payload);
+            }
+        });
+    </script>
+</body>
+
+</html>

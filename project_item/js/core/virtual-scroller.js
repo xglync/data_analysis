@@ -1,29 +1,23 @@
 /**
  * VirtualScroller 类
  * 负责虚拟滚动的坐标计算。
- * 核心特性：支持不定高度的行（通过 heightMap 记录展开行的高度）。
  */
 export class VirtualScroller {
     constructor(config) {
         this.baseRowHeight = config.rowHeight || 40;
+        this.headerHeight = config.headerHeight || 0; // 【新增】记录表头高度
         this.totalCount = 0;
         this.viewportHeight = 0;
-
-        // Map<ViewIndex, Height>
-        // 仅存储高度不为 baseRowHeight 的行（即展开行）
         this.heightMap = new Map();
-
-        // Int32Array，缓存每一行的 Top 偏移量，避免每次渲染都遍历 O(N)
         this.offsets = null;
         this.totalHeight = 0;
-        this.dirty = true; // 脏标记，指示是否需要重算 offset
+        this.dirty = true;
     }
 
-    /**
-     * 重置所有高度记录（用于排序或数据重置后）
-     */
     resetHeights() {
         this.heightMap.clear();
+        this.offsets = null;
+        this.totalHeight = 0;
         this.dirty = true;
     }
 
@@ -32,45 +26,40 @@ export class VirtualScroller {
         if (this.totalCount !== count) {
             this.totalCount = count;
             this.dirty = true;
+            this.offsets = null;
         }
     }
 
     setRowHeight(idx, h) {
-        if (h === this.baseRowHeight) {
-            this.heightMap.delete(idx);
-        } else {
-            this.heightMap.set(idx, h);
+        const currentH = this.heightMap.get(idx) || this.baseRowHeight;
+        if (currentH !== h) {
+            if (h === this.baseRowHeight) this.heightMap.delete(idx);
+            else this.heightMap.set(idx, h);
+            this.dirty = true;
+            this.offsets = null;
         }
-        this.dirty = true;
     }
 
-    /**
-     * 计算累积高度
-     */
     _calc() {
-        if (!this.dirty) return;
-
+        if (!this.dirty && this.offsets) return;
         this.offsets = new Int32Array(this.totalCount);
-        let currentOffset = 0; // acc
-
+        let acc = 0;
         for (let i = 0; i < this.totalCount; i++) {
-            this.offsets[i] = currentOffset;
-            const h = this.heightMap.get(i) || this.baseRowHeight;
-            currentOffset += h;
+            this.offsets[i] = acc;
+            acc += (this.heightMap.get(i) || this.baseRowHeight);
         }
-
-        this.totalHeight = currentOffset;
+        this.totalHeight = acc;
         this.dirty = false;
     }
 
     /**
-     * 二分查找：找到 top <= offset 的最后一行
+     * 找到 top <= offset 的最后一行
+     * 注意：这里的 offset 是相对于 content 层的物理偏移（不含 header）
      */
     _findIdx(offset) {
-        if (this.totalCount === 0) return 0;
-        if (offset <= 0) return 0;
+        if (this.totalCount === 0 || offset <= 0) return 0;
+        this._calc();
         let low = 0, high = this.totalCount - 1, res = 0;
-
         while (low <= high) {
             const mid = (low + high) >>> 1;
             if (this.offsets[mid] <= offset) {
@@ -83,58 +72,34 @@ export class VirtualScroller {
         return res;
     }
 
-    /**
-     * 根据 scrollTop 计算可见行范围
-     */
     getRenderRange(scrollTop, buffer = 3) {
         this._calc();
         if (this.totalCount === 0) return { start: 0, end: 0, totalHeight: 0 };
 
-        // 找到第一个可见行的索引
-        const start = this._findIdx(scrollTop);
+        // 【关键】计算内容区的实际可见起始点（需减去 header 占用空间）
+        const relativeScrollTop = Math.max(0, scrollTop - this.headerHeight);
+        const start = this._findIdx(relativeScrollTop);
 
         let end = start;
-        const viewportBottom = scrollTop + this.viewportHeight;
-
-        // 【核心修复】逻辑修正：
-        // 我们需要渲染直到某个元素的底部超过了视口的底部。
-        // 这样即使 start 是一个超长元素，它也会强制包含至少一个在它下方的元素。
+        const viewportBottom = relativeScrollTop + this.viewportHeight;
         while (end < this.totalCount) {
             const h = this.heightMap.get(end) || this.baseRowHeight;
-            const itemBottom = this.offsets[end] + h;
+            if (this.offsets[end] + h > viewportBottom) break;
             end++;
-            // 如果当前元素的底部已经超过了视口底部，则停止
-            if (itemBottom >= viewportBottom) break;
         }
 
-        // 应用 Buffer 扩展
-        const finalStart = Math.max(0, start - buffer);
-        const finalEnd = Math.min(this.totalCount, end + buffer);
-
         return {
-            start: finalStart,
-            end: finalEnd,
-            totalHeight: this.totalHeight
+            start: Math.max(0, start - buffer),
+            end: Math.min(this.totalCount, end + buffer + 1),
+            totalHeight: this.totalHeight + this.headerHeight // 总高度包含 header
         };
-    }
-
-    /**
-     * 给定像素区间，反查行索引范围（用于框选）
-     */
-    getIndicesInRange(top, bottom) {
-        this._calc();
-        if (this.totalCount === 0) return [0, 0];
-
-        const s = this._findIdx(top);
-        let e = this._findIdx(bottom);
-        if (e < this.totalCount - 1) e++;
-
-        return [s, Math.min(this.totalCount, e + 1)];
     }
 
     getRowTop(i) {
         this._calc();
-        return this.offsets[i];
+        // 【关键】每一行的 Top 值直接加上 headerHeight，使其在 content(top:0) 层中位置正确
+        const baseTop = (i >= 0 && i < this.totalCount) ? this.offsets[i] : 0;
+        return baseTop + this.headerHeight;
     }
 
     getRowHeight(i) {
