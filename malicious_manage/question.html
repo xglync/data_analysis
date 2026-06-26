@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不良问题管理</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f5f6fa;
+            --surface: #fff;
+            --border: #e1e4e8;
+            --text: #24292e;
+            --text-secondary: #6a737d;
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --warning: #f9ab00;
+            --success: #0d904f;
+            --row-hover: #f6f8fa;
+            --row-selected: #e8f0fe;
+            --menu-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+            --radius: 4px;
+            --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        /* ===== Status Bar ===== */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .status-bar .count {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .status-bar .selected {
+            color: var(--primary);
+        }
+
+        .status-bar .hint {
+            font-size: 11px;
+            opacity: .7;
+        }
+
+        /* ===== Table Container ===== */
+        .table-wrap {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            height: calc(100vh - 36px);
+        }
+
+        table {
+            border-collapse: collapse;
+            table-layout: fixed;
+            /* width 由 JS 根据 appConfig.fields 动态计算 min-width，
+               确保字段过多时可水平滚动，字段少时填满容器 */
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+
+        thead th {
+            background: #f0f2f5;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 7px 10px;
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        tbody td {
+            padding: 5px 10px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: default;
+        }
+
+        tbody tr {
+            transition: background .1s;
+        }
+
+        tbody tr:hover {
+            background: var(--row-hover);
+        }
+
+        tbody tr.selected {
+            background: var(--row-selected);
+        }
+
+        tbody tr.selected td {
+            border-bottom-color: #c6dafc;
+        }
+
+        /* Severity badges */
+        .badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.6;
+        }
+
+        .badge-high {
+            background: #fce8e6;
+            color: var(--danger);
+        }
+
+        .badge-medium {
+            background: #fef7e0;
+            color: #e37400;
+        }
+
+        .badge-low {
+            background: #e6f4ea;
+            color: var(--success);
+        }
+
+        /* Status badges */
+        .status-tag {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background: #fef7e0;
+            color: #e37400;
+        }
+
+        .status-processing {
+            background: #e8f0fe;
+            color: var(--primary);
+        }
+
+        .status-resolved {
+            background: #e6f4ea;
+            color: var(--success);
+        }
+
+        /* ===== Empty State ===== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 60vh;
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: .4;
+        }
+
+        .empty-state .text {
+            font-size: 14px;
+        }
+
+        /* ===== Context Menu ===== */
+        .ctx-menu {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            min-width: 150px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--menu-shadow);
+            padding: 4px 0;
+            font-size: 13px;
+        }
+
+        .ctx-menu.show {
+            display: block;
+        }
+
+        .ctx-menu .menu-item {
+            padding: 7px 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background .1s;
+            color: var(--text);
+        }
+
+        .ctx-menu .menu-item:hover {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .ctx-menu .menu-item.danger {
+            color: var(--danger);
+        }
+
+        .ctx-menu .menu-item.danger:hover {
+            background: #fce8e6;
+        }
+
+        .ctx-menu .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
+
+        /* ===== Scrollbar ===== */
+        .table-wrap::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span>共 <strong class="count" id="totalCount">0</strong> 条问题</span>
+        <span class="selected" id="selectedInfo" style="display:none">已选 <strong id="selectedCount">0</strong> 条</span>
+        <span class="hint">右键点击行可操作 ｜ 单击选中行</span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap" id="tableWrap">
+        <table id="dataTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState">
+            <div class="icon">📋</div>
+            <div class="text">暂无数据，等待父窗口下发...</div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="ctx-menu" id="ctxMenu"></div>
+
+    <script>
+        // ========== 消息分发框架 ==========
+        const MsgType = {
+            RES_DATA_QUESTION: 'RES_DATA_QUESTION',
+            SET_CONFIG: 'SET_CONFIG'
+        };
+        const ReqMsg = { REQ_DATA_QUESTION: 'REQ_DATA_QUESTION' };
+
+        // ========== 默认 App 配置（可被父窗口 SET_CONFIG 覆盖） ==========
+        let appConfig = {
+            fields: [
+                { key: 'id', label: '编号', width: '70px' },
+                { key: 'type', label: '问题类型', width: '100px' },
+                { key: 'description', label: '问题描述', width: 'auto' },
+                { key: 'severity', label: '严重程度', width: '90px', render: 'badge' },
+                { key: 'workstation', label: '工位', width: '100px' },
+                { key: 'status', label: '状态', width: '90px', render: 'status' },
+                { key: 'date', label: '发现日期', width: '110px' },
+                { key: 'reporter', label: '报告人', width: '80px' }
+            ],
+            contextMenu: [
+                { label: '🔍 查看详情', msgId: 'QUESTION_DETAIL', callback: selected => ({ ids: selected.map(s => s.id), action: 'detail' }) },
+                { label: '✅ 标记已处理', msgId: 'QUESTION_MARK_RESOLVED', callback: selected => ({ ids: selected.map(s => s.id), action: 'resolve' }) },
+                { label: '👤 分配处理人', msgId: 'QUESTION_ASSIGN', callback: selected => ({ ids: selected.map(s => s.id), action: 'assign' }) },
+                { type: 'divider' },
+                { label: '📤 导出', msgId: 'QUESTION_EXPORT', callback: selected => ({ ids: selected.map(s => s.id), action: 'export' }) },
+                { type: 'divider' },
+                { label: '🗑 删除', msgId: 'QUESTION_DELETE', callback: selected => ({ ids: selected.map(s => s.id), action: 'delete' }), className: 'danger' }
+            ]
+        };
+
+        // ========== 状态 ==========
+        let allData = [];
+        let selectedSet = new Set(); // 存储选中行的 data.id
+
+        // ========== DOM 引用 ==========
+        const tableHead = document.getElementById('tableHead');
+        const tableBody = document.getElementById('tableBody');
+        const tableWrap = document.getElementById('tableWrap');
+        const emptyState = document.getElementById('emptyState');
+        const ctxMenu = document.getElementById('ctxMenu');
+        const totalCountEl = document.getElementById('totalCount');
+        const selectedInfo = document.getElementById('selectedInfo');
+        const selectedCountEl = document.getElementById('selectedCount');
+
+        // ========== 渲染 ==========
+        // 计算表格总宽度：固定宽度字段取配置值，auto 字段默认 140px
+        function calcTableWidth() {
+            return appConfig.fields.reduce((sum, f) => {
+                if (f.width && f.width !== 'auto') {
+                    return sum + parseInt(f.width);
+                }
+                return sum + 140; // auto 字段默认最小宽度
+            }, 0);
+        }
+
+        function renderTable() {
+            if (!allData.length) {
+                tableHead.innerHTML = '';
+                tableBody.innerHTML = '';
+                emptyState.style.display = 'flex';
+                totalCountEl.textContent = '0';
+                return;
+            }
+            emptyState.style.display = 'none';
+            totalCountEl.textContent = allData.length;
+
+            // 动态设置表格最小宽度：字段少时填满容器，字段多时撑开以支持水平滚动
+            const totalW = calcTableWidth();
+            const containerW = tableWrap.clientWidth;
+            dataTable.style.minWidth = Math.max(totalW, containerW) + 'px';
+
+            // 表头
+            tableHead.innerHTML = `<tr>${appConfig.fields.map(f =>
+                `<th style="${f.width !== 'auto' ? 'width:' + f.width : ''}">${f.label}</th>`
+            ).join('')}</tr>`;
+
+            // 表体
+            tableBody.innerHTML = allData.map(row => {
+                const selClass = selectedSet.has(row.id) ? ' selected' : '';
+                return `<tr class="data-row${selClass}" data-id="${row.id}">${appConfig.fields.map(f =>
+                    `<td>${renderCell(row, f)}</td>`
+                ).join('')}</tr>`;
+            }).join('');
+        }
+
+        function renderCell(row, field) {
+            const val = row[field.key] ?? '';
+            if (field.render === 'badge') {
+                const map = { '高': 'badge-high', '中': 'badge-medium', '低': 'badge-low' };
+                const cls = map[val] || 'badge-low';
+                return `<span class="badge ${cls}">${escHtml(val)}</span>`;
+            }
+            if (field.render === 'status') {
+                const map = { '待处理': 'status-pending', '处理中': 'status-processing', '已处理': 'status-resolved', '已关闭': 'status-resolved' };
+                const cls = map[val] || '';
+                return `<span class="status-tag ${cls}">${escHtml(val)}</span>`;
+            }
+            return escHtml(String(val));
+        }
+
+        function escHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ========== 选择逻辑 ==========
+        function getRowDataById(id) {
+            return allData.find(d => d.id === id);
+        }
+
+        function updateSelectionUI() {
+            const count = selectedSet.size;
+            if (count > 0) {
+                selectedInfo.style.display = '';
+                selectedCountEl.textContent = count;
+            } else {
+                selectedInfo.style.display = 'none';
+            }
+            // 更新 tr 样式
+            document.querySelectorAll('.data-row').forEach(tr => {
+                const id = Number(tr.dataset.id);
+                tr.classList.toggle('selected', selectedSet.has(id));
+            });
+        }
+
+        // 表格行点击：单选（替换选择）
+        tableBody.addEventListener('click', e => {
+            const tr = e.target.closest('.data-row');
+            if (!tr) return;
+            const id = Number(tr.dataset.id);
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl+点击切换
+                if (selectedSet.has(id)) selectedSet.delete(id);
+                else selectedSet.add(id);
+            } else {
+                selectedSet.clear();
+                selectedSet.add(id);
+            }
+            updateSelectionUI();
+        });
+
+        // ========== 右键菜单 ==========
+        function showContextMenu(x, y, menuItems) {
+            ctxMenu.innerHTML = menuItems.map(item => {
+                if (item.type === 'divider') return '<div class="divider"></div>';
+                const cls = item.className || '';
+                return `<div class="menu-item ${cls}" data-msgid="${item.msgId}">${item.label}</div>`;
+            }).join('');
+            ctxMenu.classList.add('show');
+            // 定位修正（避免溢出视口）
+            let left = x, top = y;
+            const menuW = ctxMenu.offsetWidth || 180;
+            const menuH = ctxMenu.offsetHeight || 200;
+            if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 4;
+            if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 4;
+            if (left < 0) left = 4;
+            if (top < 0) top = 4;
+            ctxMenu.style.left = left + 'px';
+            ctxMenu.style.top = top + 'px';
+        }
+
+        function hideContextMenu() {
+            ctxMenu.classList.remove('show');
+        }
+
+        // 右键菜单项点击
+        ctxMenu.addEventListener('click', e => {
+            const item = e.target.closest('.menu-item');
+            if (!item) return;
+            const msgId = item.dataset.msgid;
+            const selected = getSelectedItems();
+            if (!selected.length) return;
+            // 查找配置中的回调
+            const cfgItem = appConfig.contextMenu.find(c => c.msgId === msgId);
+            if (!cfgItem || !cfgItem.callback) return;
+            const payload = cfgItem.callback(selected);
+            sendToParent(msgId, payload);
+            hideContextMenu();
+        });
+
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', e => {
+            if (!ctxMenu.contains(e.target)) hideContextMenu();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') hideContextMenu();
+        });
+
+        // 表格行右击
+        tableBody.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const tr = e.target.closest('.data-row');
+            if (!tr) return;
+            const id = Number(tr.dataset.id);
+            // 如果该行未选中，则切换为仅选中该行
+            if (!selectedSet.has(id)) {
+                selectedSet.clear();
+                selectedSet.add(id);
+                updateSelectionUI();
+            }
+            showContextMenu(e.clientX, e.clientY, appConfig.contextMenu);
+        });
+
+        // ========== 获取选中项 ==========
+        function getSelectedItems() {
+            return Array.from(selectedSet).map(id => getRowDataById(id)).filter(Boolean);
+        }
+
+        // ========== 发送消息到父窗口 ==========
+        function sendToParent(type, data) {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type, data }, '*');
+            }
+        }
+
+        // ========== 接收父窗口消息 ==========
+        window.addEventListener('message', function (e) {
+            const msg = e.data;
+            if (!msg || !msg.type) return;
+
+            switch (msg.type) {
+                case MsgType.RES_DATA_QUESTION:
+                    allData = Array.isArray(msg.data) ? msg.data : [];
+                    selectedSet.clear();
+                    renderTable();
+                    updateSelectionUI();
+                    break;
+
+                case MsgType.SET_CONFIG:
+                    if (msg.data) {
+                        if (msg.data.fields) appConfig.fields = msg.data.fields;
+                        if (msg.data.contextMenu) appConfig.contextMenu = msg.data.contextMenu;
+                        // 重新渲染以应用新字段
+                        renderTable();
+                        selectedSet.clear();
+                        updateSelectionUI();
+                    }
+                    break;
+            }
+        });
+
+        // ========== 初始化 ==========
+        renderTable();
+        // 向父窗口请求数据
+        sendToParent(ReqMsg.REQ_DATA_QUESTION, null);
+
+        // 窗口大小变化时修正菜单
+        window.addEventListener('resize', hideContextMenu);
+    </script>
+</body>
+
+</html>

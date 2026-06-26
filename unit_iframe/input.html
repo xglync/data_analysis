@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>高集成商品组件管理系统</title>
+    <style>
+        :root {
+            --primary: #409eff;
+            --success: #67c23a;
+            --warning: #e6a23c;
+            --error: #f56c6c;
+            --text: #303133;
+            --border: #dcdfe6;
+            --bg-lock: #f5f7fa;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f4f6f8;
+            padding: 20px;
+            color: var(--text);
+        }
+
+        .card {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+        }
+
+        #debug-log {
+            background: #222;
+            color: #8ddb8d;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border: 1px solid #444;
+        }
+
+        .section {
+            border: 1px solid #eef0f2;
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 25px;
+            transition: 0.3s;
+            position: relative;
+        }
+
+        .section.state-matched {
+            border-color: var(--success);
+            background: #fafffb;
+        }
+
+        .section.state-editing {
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 10px rgba(64, 158, 255, 0.1);
+        }
+
+        .section.state-new {
+            border-color: var(--warning);
+            background: #fffdf9;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .title-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .title {
+            font-weight: 700;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .title::before {
+            content: "";
+            width: 4px;
+            height: 16px;
+            background: var(--primary);
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+
+        .btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: #fff;
+            transition: 0.2s;
+        }
+
+        .btn-edit {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-edit:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-save {
+            background: var(--success);
+            color: #fff;
+            border: none;
+        }
+
+        .btn-cancel {
+            background: #909399;
+            color: #fff;
+            border: none;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .item {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        label {
+            font-size: 11px;
+            color: #909399;
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        input {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input.is-id {
+            border-bottom: 2px solid var(--primary);
+            background: #fcfdfe;
+        }
+
+        input.is-primary {
+            border-bottom: 2px solid var(--error);
+        }
+
+        input:disabled {
+            background: var(--bg-lock);
+            color: #a8abb2;
+            cursor: not-allowed;
+        }
+
+        .suggest-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+            margin-top: 4px;
+            padding: 0;
+            list-style: none;
+            z-index: 1000;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .suggest-item {
+            padding: 10px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 1px solid #f9f9f9;
+        }
+
+        .suggest-item:hover {
+            background: #f0f7ff;
+            color: var(--primary);
+        }
+
+        .status-pill {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+
+        .pill-edit {
+            background: #eee;
+            color: #666;
+        }
+
+        .pill-match {
+            background: #e1f3d8;
+            color: #529b2e;
+        }
+
+        .pill-new {
+            background: #faecd8;
+            color: #b88230;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .footer-tools {
+            margin-top: 15px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #eee;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="debug-log">> 交互指引：加载 P001 -> 修改组件A ID 为 SN-999 -> 保存组件A。
+        系统不仅会存 SN-999，还会自动更新 P001 的关联关系指向 SN-999。</div>
+    <div id="widget-root" class="card"></div>
+
+    <script>
+        /**
+         * 配置项
+         */
+        const CONFIG = {
+            debounceQuery: 1500,
+            debounceSuggest: 200,
+            product: {
+                id: 'product', title: '商品主信息', primaryKey: 'baseId',
+                fields: [
+                    { key: 'baseId', label: '商品ID (主)', isId: true, isPrimary: true },
+                    { key: 'region', label: '区域 (副)', isId: true },
+                    { key: 'name', label: '商品名称' },
+                    { key: 'brand', label: '品牌' }
+                ]
+            },
+            components: [
+                {
+                    type: 'CompA', title: '组件 A', primaryKey: 'sn',
+                    fields: [
+                        { key: 'sn', label: '序列号 (主)', isId: true, isPrimary: true },
+                        { key: 'vcc', label: '工作电压' }
+                    ]
+                },
+                {
+                    type: 'CompB', title: '组件 B', primaryKey: 'bId',
+                    fields: [
+                        { key: 'bId', label: '标识符 (主)', isId: true, isPrimary: true },
+                        { key: 'material', label: '材质' }
+                    ]
+                }
+            ]
+        };
+
+        class IntegratedWidget {
+            constructor(cfg) {
+                this.cfg = cfg;
+                this.timers = { q: {}, s: {} };
+                this.inputs = {};
+                this.state = {};
+                this.render();
+                this.initGlobalClick();
+            }
+
+            render() {
+                const root = document.getElementById('widget-root');
+                let html = this.genSection(this.cfg.product, 'product');
+                html += `<div id="comp-layer" class="hidden">`;
+                this.cfg.components.forEach(c => html += this.genSection(c, c.type));
+                html += `</div>`;
+                root.innerHTML = html;
+
+                const groups = ['product', ...this.cfg.components.map(c => c.type)];
+                groups.forEach(g => this.state[g] = { isEditing: false, found: false, data: {} });
+
+                this.cacheAndBind();
+            }
+
+            genSection(conf, groupId) {
+                return `
+            <div class="section" id="sec-${groupId}">
+                <div class="header">
+                    <div class="title-group">
+                        <span class="title">${conf.title}</span>
+                        <span id="pill-${groupId}" class="status-pill pill-edit">待输入</span>
+                    </div>
+                    <div class="toolbar">
+                        <button class="btn btn-edit" id="btn-edit-${groupId}" onclick="app.enterEditMode('${groupId}')">修改模式</button>
+                    </div>
+                </div>
+                <div class="grid">
+                    ${conf.fields.map(f => `
+                        <div class="item">
+                            <label>${f.label}</label>
+                            <input type="text" id="in-${groupId}-${f.key}" data-group="${groupId}" data-key="${f.key}"
+                                   data-isid="${!!f.isId}" data-ispk="${!!f.isPrimary}"
+                                   class="${f.isId ? (f.isPrimary ? 'is-id is-primary' : 'is-id') : ''}" autocomplete="off">
+                            <ul id="list-${groupId}-${f.key}" class="suggest-list hidden"></ul>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="footer-tools hidden" id="tools-${groupId}">
+                    <button class="btn btn-save" onclick="app.saveData('${groupId}')">保存</button>
+                    <button class="btn btn-cancel" onclick="app.cancelEdit('${groupId}')">取消</button>
+                </div>
+            </div>`;
+            }
+
+            cacheAndBind() {
+                this.root = document.getElementById('widget-root');
+                this.root.querySelectorAll('input').forEach(ipt => {
+                    this.inputs[`${ipt.dataset.group}_${ipt.dataset.key}`] = ipt;
+                    if (ipt.dataset.isid === 'true') {
+                        ipt.addEventListener('input', () => this.onIdInput(ipt));
+                    }
+                });
+                window.addEventListener('message', (e) => this.handleMessage(e.data));
+            }
+
+            initGlobalClick() {
+                document.addEventListener('mousedown', (e) => {
+                    if (!e.target.closest('.item')) this.hideAllSuggests();
+                });
+            }
+
+            hideAllSuggests() {
+                document.querySelectorAll('.suggest-list').forEach(el => el.classList.add('hidden'));
+            }
+
+            enterEditMode(groupId) {
+                const s = this.state[groupId];
+                s.isEditing = true;
+                s.snapshot = {};
+
+                if (groupId === 'product') {
+                    this.cfg.components.forEach(c => this.updateUIState(c.type));
+                }
+
+                const conf = this.getConf(groupId);
+                conf.fields.forEach(f => {
+                    const ipt = this.inputs[`${groupId}_${f.key}`];
+                    s.snapshot[f.key] = ipt.value;
+                    ipt.disabled = false;
+                });
+                this.updateUIState(groupId);
+            }
+
+            cancelEdit(groupId) {
+                const s = this.state[groupId];
+                s.isEditing = false;
+                const conf = this.getConf(groupId);
+                conf.fields.forEach(f => this.inputs[`${groupId}_${f.key}`].value = s.snapshot[f.key] || '');
+                if (groupId === 'product') this.cfg.components.forEach(c => this.updateUIState(c.type));
+                this.updateUIState(groupId);
+            }
+
+            /** 
+             * 关键逻辑改进：组件保存时，如果存在当前商品，则更新该商品的关联关系
+             */
+            saveData(groupId) {
+                const s = this.state[groupId];
+                const conf = this.getConf(groupId);
+                const data = {};
+                conf.fields.forEach(f => data[f.key] = this.inputs[`${groupId}_${f.key}`].value.trim());
+
+                const payload = {
+                    type: 'SAVE_DATA',
+                    group: groupId,
+                    data: data,
+                    primaryKey: conf.primaryKey
+                };
+
+                if (groupId === 'product') {
+                    // 商品批量保存逻辑
+                    payload.batchComponents = {};
+                    this.cfg.components.forEach(c => {
+                        const cData = {};
+                        c.fields.forEach(f => cData[f.key] = this.inputs[`${c.type}_${f.key}`].value.trim());
+                        payload.batchComponents[c.type] = { data: cData, primaryKey: c.primaryKey };
+                    });
+                } else {
+                    // 组件保存逻辑：如果当前存在已查询到的商品且商品不在编辑态，需同步更新该商品的关联
+                    const ps = this.state['product'];
+                    if (ps && ps.found && !ps.isEditing) {
+                        payload.linkToProductId = ps.data[this.cfg.product.primaryKey];
+                        payload.linkToProductRegion = ps.data['region']; // 考虑复合主键
+                    }
+                }
+
+                window.parent.postMessage(payload, '*');
+                this.log(`上报保存请求 [${groupId}]...`);
+
+                s.isEditing = false;
+                // 如果是组件更新且关联了商品，保存后重新查询商品以刷新整表状态
+                if (payload.linkToProductId) {
+                    this.execQuery('product', false);
+                } else {
+                    this.execQuery(groupId, false);
+                }
+            }
+
+            onIdInput(ipt) {
+                const { group } = ipt.dataset;
+                if (this.state[group].isEditing) return;
+
+                this.resetSection(group, !ipt.value.trim());
+                if (group === 'product') {
+                    document.getElementById('comp-layer').classList.add('hidden');
+                    this.cfg.components.forEach(c => this.resetSection(c.type, !ipt.value.trim()));
+                }
+
+                clearTimeout(this.timers.s[`${group}_${ipt.dataset.key}`]);
+                clearTimeout(this.timers.q[group]);
+
+                if (ipt.value.trim()) {
+                    this.timers.s[`${group}_${ipt.dataset.key}`] = setTimeout(() => {
+                        window.parent.postMessage({ type: 'REQ_S', group, key: ipt.dataset.key, val: ipt.value.trim() }, '*');
+                    }, this.cfg.debounceSuggest);
+                }
+
+                const conf = this.getConf(group);
+                if (this.inputs[`${group}_${conf.primaryKey}`].value.trim()) {
+                    this.timers.q[group] = setTimeout(() => this.execQuery(group, false), this.cfg.debounceQuery);
+                }
+            }
+
+            execQuery(group, isCascade) {
+                const conf = this.getConf(group);
+                const criteria = {};
+                conf.fields.filter(f => f.isId).forEach(f => criteria[f.key] = this.inputs[`${group}_${f.key}`].value.trim());
+                window.parent.postMessage({ type: group === 'product' ? 'REQ_P' : 'REQ_C', compType: group, primaryKey: conf.primaryKey, criteria, isCascade }, '*');
+            }
+
+            resetSection(groupId, forceClear) {
+                const s = this.state[groupId];
+                s.found = false;
+                const conf = this.getConf(groupId);
+                conf.fields.forEach(f => {
+                    const ipt = this.inputs[`${groupId}_${f.key}`];
+                    ipt.disabled = false;
+                    if (forceClear || !f.isId) ipt.value = '';
+                });
+                this.updateUIState(groupId);
+            }
+
+            handleMessage(msg) {
+                if (msg.type === 'RES_S') this.renderSuggest(msg.group, msg.key, msg.list);
+
+                if (msg.type === 'RES_P') {
+                    const s = this.state.product;
+                    s.found = msg.found;
+                    s.data = msg.data || {};
+                    this.updateUIState('product');
+                    document.getElementById('comp-layer').classList.remove('hidden');
+
+                    if (msg.found) {
+                        this.cfg.components.forEach(c => {
+                            const d = (msg.data.rel && msg.data.rel[c.type]) ? msg.data.rel[c.type] : null;
+                            const cs = this.state[c.type];
+                            if (d) {
+                                c.fields.filter(f => f.isId).forEach(f => this.inputs[`${c.type}_${f.key}`].value = d[f.key] || '');
+                                cs.found = true;
+                                this.execQuery(c.type, true);
+                            } else {
+                                cs.found = false;
+                            }
+                            this.updateUIState(c.type, d ? true : false);
+                        });
+                    } else {
+                        this.cfg.components.forEach(c => {
+                            if (this.inputs[`${c.type}_${c.primaryKey}`].value.trim()) this.execQuery(c.type, false);
+                        });
+                    }
+                }
+
+                if (msg.type === 'RES_C') {
+                    const s = this.state[msg.compType];
+                    s.found = msg.found;
+                    s.data = msg.data || {};
+                    this.updateUIState(msg.compType, msg.isCascade && msg.found);
+                }
+            }
+
+            updateUIState(groupId, forceIdLock = false) {
+                const s = this.state[groupId];
+                const conf = this.getConf(groupId);
+                const sec = document.getElementById(`sec-${groupId}`);
+                const pill = document.getElementById(`pill-${groupId}`);
+                const tools = document.getElementById(`tools-${groupId}`);
+                const editBtn = document.getElementById(`btn-edit-${groupId}`);
+                const isProductEditing = this.state['product'] ? this.state['product'].isEditing : false;
+
+                sec.classList.remove('state-matched', 'state-new', 'state-editing');
+                if (s.isEditing) sec.classList.add('state-editing');
+                else if (s.found) sec.classList.add('state-matched');
+                else sec.classList.add('state-new');
+
+                pill.className = 'status-pill ' + (s.isEditing ? 'pill-edit' : (s.found ? 'pill-match' : 'pill-new'));
+                pill.textContent = s.isEditing ? '正在修改' : (s.found ? '匹配成功' : '新记录');
+
+                tools.classList.toggle('hidden', !s.isEditing);
+                editBtn.disabled = s.isEditing;
+
+                conf.fields.forEach(f => {
+                    const ipt = this.inputs[`${groupId}_${f.key}`];
+                    if (!s.isEditing && s.found && s.data[f.key] !== undefined) ipt.value = s.data[f.key];
+                    if (s.isEditing) ipt.disabled = false;
+                    else {
+                        if (!f.isId) ipt.disabled = s.found;
+                        else ipt.disabled = (groupId !== 'product' && isProductEditing) ? false : forceIdLock;
+                    }
+                });
+            }
+
+            getConf(groupId) { return groupId === 'product' ? this.cfg.product : this.cfg.components.find(c => c.type === groupId); }
+            log(m) { document.getElementById('debug-log').prepend(`> ${m}\n`); }
+
+            renderSuggest(group, key, list) {
+                const ul = document.getElementById(`list-${group}-${key}`);
+                if (!list || list.length === 0) { ul.classList.add('hidden'); return; }
+                ul.innerHTML = list.map(v => `<li class="suggest-item" data-val="${v}">${v}</li>`).join('');
+                ul.classList.remove('hidden');
+                ul.onmousedown = (e) => {
+                    this.inputs[`${group}_${key}`].value = e.target.dataset.val;
+                    this.hideSuggest(group, key);
+                    this.onIdInput(this.inputs[`${group}_${key}`]);
+                };
+            }
+
+            hideSuggest(g, ky) {
+                const ul = document.getElementById(`list-${g}-${ky}`);
+                if (ul) ul.classList.add('hidden');
+            }
+        }
+
+        const app = new IntegratedWidget(CONFIG);
+
+        /**
+         * ==========================================
+         * 父窗口：支持组件保存时的关联静默更新
+         * ==========================================
+         */
+        const MOCK_DB = {
+            prods: [
+                { baseId: 'P001', region: 'CN', name: '旗舰机', brand: '华为', rel: { CompA: { sn: 'SN-888' }, CompB: { bId: 'B1' } } }
+            ],
+            CompA: [{ sn: 'SN-888', vcc: '5V' }, { sn: 'SN-999', vcc: '12V' }],
+            CompB: [{ bId: 'B1', material: '钛' }]
+        };
+
+        window.addEventListener('message', (e) => {
+            const { type, group, criteria, compType, primaryKey, isCascade, data, batchComponents, linkToProductId, linkToProductRegion } = e.data;
+            const eq = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+
+            // 查询处理... (REQ_S, REQ_P, REQ_C 同前)
+            if (type === 'REQ_S') {
+                let source = group === 'product' ? MOCK_DB.prods : MOCK_DB[group];
+                let list = [...new Set((source || []).map(i => i[e.data.key]))].filter(v => String(v).toLowerCase().includes(e.data.val.toLowerCase())).slice(0, 5);
+                window.postMessage({ type: 'RES_S', group, key: e.data.key, list }, '*');
+            }
+            if (type === 'REQ_P') {
+                const res = MOCK_DB.prods.find(p => eq(p[primaryKey], criteria[primaryKey]) && (!criteria.region || eq(p.region, criteria.region)));
+                window.postMessage({ type: 'RES_P', found: !!res, data: res }, '*');
+            }
+            if (type === 'REQ_C') {
+                const db = MOCK_DB[compType] || [];
+                const res = db.find(i => eq(i[primaryKey], criteria[primaryKey]));
+                window.postMessage({ type: 'RES_C', compType, found: !!res, data: res, isCascade }, '*');
+            }
+
+            // 保存逻辑处理
+            if (type === 'SAVE_DATA') {
+                if (group === 'product') {
+                    // 批量保存逻辑
+                    const relMap = {};
+                    if (batchComponents) {
+                        Object.keys(batchComponents).forEach(cType => {
+                            const cInfo = batchComponents[cType];
+                            const pk = cInfo.primaryKey;
+                            const cData = cInfo.data;
+                            if (cData[pk]) {
+                                if (!MOCK_DB[cType]) MOCK_DB[cType] = [];
+                                const cIdx = MOCK_DB[cType].findIndex(item => eq(item[pk], cData[pk]));
+                                if (cIdx > -1) MOCK_DB[cType][cIdx] = cData; else MOCK_DB[cType].push(cData);
+                                relMap[cType] = { [pk]: cData[pk] };
+                            }
+                        });
+                    }
+                    const prodIdx = MOCK_DB.prods.findIndex(p => eq(p[primaryKey], data[primaryKey]));
+                    if (prodIdx > -1) MOCK_DB.prods[prodIdx] = { ...data, rel: relMap }; else MOCK_DB.prods.push({ ...data, rel: relMap });
+                } else {
+                    // 单组件保存：Upsert 组件表
+                    if (!MOCK_DB[group]) MOCK_DB[group] = [];
+                    const idx = MOCK_DB[group].findIndex(i => eq(i[primaryKey], data[primaryKey]));
+                    if (idx > -1) MOCK_DB[group][idx] = data; else MOCK_DB[group].push(data);
+
+                    // 关键修复逻辑：如果提供了关联商品ID，同步更新商品表的映射关系
+                    if (linkToProductId) {
+                        const pIdx = MOCK_DB.prods.findIndex(p => eq(p['baseId'], linkToProductId) && (!linkToProductRegion || eq(p['region'], linkToProductRegion)));
+                        if (pIdx > -1) {
+                            if (!MOCK_DB.prods[pIdx].rel) MOCK_DB.prods[pIdx].rel = {};
+                            MOCK_DB.prods[pIdx].rel[group] = { [primaryKey]: data[primaryKey] };
+                            console.log(`静默更新商品[${linkToProductId}]关联关系为:`, MOCK_DB.prods[pIdx].rel);
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

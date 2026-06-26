@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不良手机管理</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f5f6fa;
+            --surface: #fff;
+            --border: #e1e4e8;
+            --text: #24292e;
+            --text-secondary: #6a737d;
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --success: #0d904f;
+            --warning: #f9ab00;
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+            --card-hover-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+            --card-selected-border: #1a73e8;
+            --card-selected-bg: #e8f0fe;
+            --menu-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+            --radius: 4px;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        /* ===== Status Bar ===== */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 14px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .status-bar .count {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .status-bar .selected {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .status-bar .hint {
+            font-size: 11px;
+            opacity: .7;
+        }
+
+        /* ===== Main Scroll Area ===== */
+        .main-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            height: calc(100vh - 36px);
+            position: relative;
+            padding: 8px;
+        }
+
+        /* ===== Level 1 Group ===== */
+        .group-l1 {
+            margin-bottom: 10px;
+        }
+
+        .group-l1-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f0f2f5;
+            border-radius: var(--radius) var(--radius) 0 0;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+            border: 1px solid var(--border);
+        }
+
+        .group-l1-header .arrow {
+            transition: transform .2s;
+            font-size: 11px;
+        }
+
+        .group-l1-header .count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .group-l1.collapsed .group-l1-header {
+            border-radius: var(--radius);
+        }
+
+        .group-l1.collapsed .group-l1-body {
+            display: none;
+        }
+
+        .group-l1.collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+
+        /* ===== Level 2 Group ===== */
+        .group-l2 {
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 6px 10px 10px;
+        }
+
+        .group-l2:last-child {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .group-l2-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            padding: 4px 0 6px 0;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .group-l2-header .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary);
+        }
+
+        /* ===== Card Grid ===== */
+        .card-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            /* 单个分类内不良机过多时限制高度并独立滚动 */
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 8px;
+            /* 给滚动条留空间，Windows 默认滚动条较宽 */
+        }
+
+        /* card-grid 自身的滚动条 */
+        .card-grid::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .card-grid::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .card-grid::-webkit-scrollbar-thumb {
+            background: #d0d0d0;
+            border-radius: 2px;
+        }
+
+        .card-grid::-webkit-scrollbar-thumb:hover {
+            background: #b0b0b0;
+        }
+
+        /* ===== Phone Card ===== */
+        .phone-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            cursor: pointer;
+            user-select: none;
+            transition: all .15s;
+            box-shadow: var(--card-shadow);
+            min-width: 160px;
+            flex: 0 0 auto;
+            position: relative;
+        }
+
+        .phone-card:hover {
+            box-shadow: var(--card-hover-shadow);
+            border-color: #b0b8c4;
+        }
+
+        .phone-card.selected {
+            border-color: var(--card-selected-border);
+            background: var(--card-selected-bg);
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, .25);
+        }
+
+        .phone-card .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .phone-card .card-label {
+            color: var(--text-secondary);
+            font-size: 11px;
+            min-width: 80px;
+        }
+
+        .phone-card .card-value {
+            font-weight: 500;
+            white-space: nowrap;
+            /* 强制不换行 */
+            overflow: hidden;
+            /* 隐藏溢出内容 */
+            text-overflow: ellipsis;
+            /* 显示省略号 */
+        }
+
+        .phone-card .card-sn {
+            font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+            font-size: 11px;
+        }
+
+        /* Status badges */
+        .card-status {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .cs-pending {
+            background: #fef7e0;
+            color: #e37400;
+        }
+
+        .cs-repaired {
+            background: #e6f4ea;
+            color: var(--success);
+        }
+
+        .cs-scrapped {
+            background: #fce8e6;
+            color: var(--danger);
+        }
+
+        /* ===== Selection Rectangle ===== */
+        .selection-rect {
+            position: fixed;
+            /* 直接定位在视口，与 clientX/Y 坐标系一致 */
+            border: 1px dashed var(--primary);
+            background: rgba(26, 115, 232, .08);
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
+        /* ===== Empty State ===== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 60vh;
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: .4;
+        }
+
+        .empty-state .text {
+            font-size: 14px;
+        }
+
+        /* ===== Context Menu ===== */
+        .ctx-menu {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            min-width: 150px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--menu-shadow);
+            padding: 4px 0;
+            font-size: 13px;
+        }
+
+        .ctx-menu.show {
+            display: block;
+        }
+
+        .ctx-menu .menu-item {
+            padding: 7px 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background .1s;
+            color: var(--text);
+        }
+
+        .ctx-menu .menu-item:hover {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .ctx-menu .menu-item.danger {
+            color: var(--danger);
+        }
+
+        .ctx-menu .menu-item.danger:hover {
+            background: #fce8e6;
+        }
+
+        .ctx-menu .menu-item.disabled {
+            color: #bbb;
+            pointer-events: none;
+        }
+
+        .ctx-menu .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
+
+        /* ===== Scrollbar ===== */
+        .main-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .main-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-scroll::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .main-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span>共 <strong class="count" id="totalCount">0</strong> 台不良机</span>
+        <span class="selected" id="selectedInfo" style="display:none">已选 <strong id="selectedCount">0</strong> 台</span>
+        <span class="hint">拖拽框选 ｜ Ctrl+点击复选 ｜ 右键批量操作 ｜ 点击分组标题折叠</span>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-scroll" id="mainScroll">
+        <div id="contentArea"></div>
+        <div class="empty-state" id="emptyState">
+            <div class="icon">📱</div>
+            <div class="text">暂无数据，等待父窗口下发...</div>
+        </div>
+        <!-- Selection Rectangle -->
+        <div class="selection-rect" id="selRect"></div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="ctx-menu" id="ctxMenu"></div>
+
+    <script>
+        // ========== 消息分发框架 ==========
+        const MsgType = {
+            RES_DATA_PHONE: 'RES_DATA_PHONE',
+            SET_CONFIG: 'SET_CONFIG'
+        };
+        const ReqMsg = { REQ_DATA_PHONE: 'REQ_DATA_PHONE' };
+
+        // ========== 默认 App 配置 ==========
+        let appConfig = {
+            // 两级分组字段
+            groupBy: { level1: 'workstation', level2: 'defectType' },
+            // 卡片展示字段（一行一个 key:label）
+            cardFields: [
+                { key: 'sn', label: 'SN', mono: true },
+                { key: 'model', label: '机型' },
+                { key: 'status', label: '状态', render: 'status' },
+                { key: 'line', label: '产线' },
+                { key: 'operator', label: '操作员' },
+                { key: 'time', label: '时间' }
+            ],
+            // 右键菜单
+            contextMenu: [
+                { label: '🔧 批量报修', msgId: 'PHONE_BATCH_REPAIR', callback: selected => ({ ids: selected.map(s => s.id), action: 'repair' }) },
+                { label: '🗑 批量报废', msgId: 'PHONE_BATCH_SCRAP', callback: selected => ({ ids: selected.map(s => s.id), action: 'scrap' }), className: 'danger' },
+                { type: 'divider' },
+                { label: '📤 导出选中', msgId: 'PHONE_EXPORT_SELECTED', callback: selected => ({ ids: selected.map(s => s.id), action: 'export' }) },
+                { label: '📋 复制SN列表', msgId: 'PHONE_COPY_SN', callback: selected => ({ sns: selected.map(s => s.sn).join('\n'), action: 'copy' }) },
+                { type: 'divider' },
+                { label: '☑ 全选本组', msgId: 'PHONE_SELECT_CURRENT_GROUP', callback: selected => ({ ids: selected.map(s => s.id), action: 'selectAll' }) },
+                { label: '▢ 取消全选', msgId: 'PHONE_CLEAR_SELECTION', callback: () => ({ action: 'clearSelection' }) }
+            ]
+        };
+
+        // ========== 状态 ==========
+        let allData = [];
+        let selectedSet = new Set(); // 存储 data.id
+
+        // ========== DOM ==========
+        const mainScroll = document.getElementById('mainScroll');
+        const contentArea = document.getElementById('contentArea');
+        const emptyState = document.getElementById('emptyState');
+        const selRect = document.getElementById('selRect');
+        const ctxMenu = document.getElementById('ctxMenu');
+        const totalCountEl = document.getElementById('totalCount');
+        const selectedInfo = document.getElementById('selectedInfo');
+        const selectedCountEl = document.getElementById('selectedCount');
+
+        // ========== 数据分组 ==========
+        function groupData(data) {
+            const l1Key = appConfig.groupBy.level1;
+            const l2Key = appConfig.groupBy.level2;
+            const map = new Map();
+            for (const item of data) {
+                const k1 = item[l1Key] || '(未分类)';
+                const k2 = item[l2Key] || '(未分类)';
+                if (!map.has(k1)) map.set(k1, new Map());
+                const sub = map.get(k1);
+                if (!sub.has(k2)) sub.set(k2, []);
+                sub.get(k2).push(item);
+            }
+            return map;
+        }
+
+        // ========== 渲染 ==========
+        function renderContent() {
+            if (!allData.length) {
+                contentArea.innerHTML = '';
+                emptyState.style.display = 'flex';
+                totalCountEl.textContent = '0';
+                return;
+            }
+            emptyState.style.display = 'none';
+            totalCountEl.textContent = allData.length;
+
+            const grouped = groupData(allData);
+            let html = '';
+
+            for (const [l1Name, l2Map] of grouped) {
+                let l1Count = 0;
+                for (const items of l2Map.values()) l1Count += items.length;
+
+                html += `<div class="group-l1" data-l1="${escAttr(l1Name)}">`;
+                html += `<div class="group-l1-header" data-action="toggle-l1">
+      <span class="arrow">▼</span><span>${escHtml(l1Name)}</span>
+      <span class="count">(${l1Count}台)</span>
+    </div>`;
+                html += `<div class="group-l1-body">`;
+
+                for (const [l2Name, items] of l2Map) {
+                    html += `<div class="group-l2" data-l2="${escAttr(l2Name)}">`;
+                    html += `<div class="group-l2-header"><span class="dot"></span>${escHtml(l2Name)} <span class="count">(${items.length}台)</span></div>`;
+                    html += `<div class="card-grid">`;
+
+                    for (const item of items) {
+                        const sel = selectedSet.has(item.id) ? ' selected' : '';
+                        html += `<div class="phone-card${sel}" data-id="${item.id}" data-l1="${escAttr(l1Name)}" data-l2="${escAttr(l2Name)}">`;
+                        for (const f of appConfig.cardFields) {
+                            const val = item[f.key] ?? '';
+                            const monoClass = f.mono ? ' card-sn' : '';
+                            html += `<div class="card-row">
+            <span class="card-label">${f.label}</span>
+            <span class="card-value${monoClass}">${renderCardValue(val, f)}</span>
+          </div>`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    html += `</div></div>`; // card-grid, group-l2
+                }
+
+                html += `</div></div>`; // group-l1-body, group-l1
+            }
+
+            contentArea.innerHTML = html;
+        }
+
+        function renderCardValue(val, field) {
+            if (field.render === 'status') {
+                const map = { '待维修': 'cs-pending', '已维修': 'cs-repaired', '已报废': 'cs-scrapped' };
+                const cls = map[val] || '';
+                return `<span class="card-status ${cls}">${escHtml(val)}</span>`;
+            }
+            return escHtml(String(val));
+        }
+
+        function escHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+        function escAttr(str) {
+            return String(str).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        // ========== 选择 UI 更新 ==========
+        function updateSelectionUI() {
+            const count = selectedSet.size;
+            if (count > 0) {
+                selectedInfo.style.display = '';
+                selectedCountEl.textContent = count;
+            } else {
+                selectedInfo.style.display = 'none';
+            }
+            // 更新卡片样式
+            contentArea.querySelectorAll('.phone-card').forEach(card => {
+                const id = Number(card.dataset.id);
+                card.classList.toggle('selected', selectedSet.has(id));
+            });
+        }
+
+        function getSelectedItems() {
+            return Array.from(selectedSet).map(id => allData.find(d => d.id === id)).filter(Boolean);
+        }
+
+        // ========== 统一 click 处理：卡片选择 / 折叠切换 / 空白清空 ==========
+        // 绑定在 mainScroll 上确保 padding 空白区也能响应
+        mainScroll.addEventListener('click', e => {
+            // 刚刚完成拖拽框选 → 不处理 click，避免清空选中结果
+            // wasDragSelection 由 onSelMouseUp 中的 setTimeout(0) 延迟重置，
+            // 确保紧随其后的 click/dblclick 两个同步事件都能被拦截
+            if (wasDragSelection) {
+                return;
+            }
+
+            // 菜单点击不处理
+            if (e.target.closest('.ctx-menu')) return;
+
+            // 1) 卡片点击
+            const card = e.target.closest('.phone-card');
+            if (card) {
+                const id = Number(card.dataset.id);
+                if (e.ctrlKey || e.metaKey) {
+                    if (selectedSet.has(id)) selectedSet.delete(id);
+                    else selectedSet.add(id);
+                } else {
+                    selectedSet.clear();
+                    selectedSet.add(id);
+                }
+                updateSelectionUI();
+                return;
+            }
+
+            // 2) 分组折叠/展开
+            const header = e.target.closest('[data-action="toggle-l1"]');
+            if (header) {
+                const group = header.closest('.group-l1');
+                if (group) group.classList.toggle('collapsed');
+                return;
+            }
+
+            // 3) 点击空白处 → 清空选中
+            selectedSet.clear();
+            updateSelectionUI();
+        });
+        mainScroll.addEventListener('dblclick', e => {
+            // 刚刚完成拖拽框选 → 不处理 dblclick，避免清空选中结果
+            if (wasDragSelection) {
+                return;
+            }
+
+            // 菜单点击不处理
+            if (e.target.closest('.ctx-menu')) return;
+
+            // 1) 卡片点击
+            const card = e.target.closest('.phone-card');
+            if (card) {
+                const id = Number(card.dataset.id);
+                selectedSet.clear();
+                selectedSet.add(id);
+                updateSelectionUI();
+                sendToParent("PHONE_DBLCLICK", { ids: getSelectedItems().map(s => s.id), action: 'double_click' });
+                return;
+            }
+
+            // 3) 点击空白处 → 清空选中
+            selectedSet.clear();
+            updateSelectionUI();
+        });
+
+        // ========== 框选 (Rubber-band Selection) ==========
+        let isSelecting = false;
+        let selStartCX = 0, selStartCY = 0;  // 存原始 clientX/Y，不做任何坐标换算
+        let selCtrlKey = false;
+        let wasDragSelection = false;
+        let dragSelectionTimer = null;  // 延迟重置 wasDragSelection，避免 click/dblclick 竞态
+
+        // 全局 mousemove / mouseup（绑定在 document，确保鼠标移出区域后仍能跟踪）
+        function onSelMouseMove(e) {
+            if (!isSelecting) return;
+            // 直接使用 clientX/Y + position:fixed，完全消除坐标系换算误差
+            const x = Math.min(selStartCX, e.clientX);
+            const y = Math.min(selStartCY, e.clientY);
+            const w = Math.abs(e.clientX - selStartCX);
+            const h = Math.abs(e.clientY - selStartCY);
+
+            selRect.style.left = x + 'px';
+            selRect.style.top = y + 'px';
+            selRect.style.width = w + 'px';
+            selRect.style.height = h + 'px';
+        }
+
+        function onSelMouseUp(e) {
+            if (!isSelecting) return;
+            isSelecting = false;
+            document.removeEventListener('mousemove', onSelMouseMove);
+            document.removeEventListener('mouseup', onSelMouseUp);
+
+            // 在隐藏 selRect 前获取其视口坐标（用于碰撞检测）
+            const selViewport = selRect.getBoundingClientRect();
+            selRect.style.display = 'none';
+
+            const sw = selViewport.width;
+            const sh = selViewport.height;
+            if (sw < 4 && sh < 4) return; // 太小的选区忽略（误触点击，不清空选中）
+
+            // 标记刚完成一次真正拖拽，阻止后续 click/dblclick 事件误清空
+            // 使用 setTimeout(0) 延迟重置，确保同步触发的 click + dblclick 都能被拦截
+            wasDragSelection = true;
+            clearTimeout(dragSelectionTimer);
+            dragSelectionTimer = setTimeout(() => { wasDragSelection = false; }, 0);
+
+            // 真正拖拽框选：非 Ctrl 时先清空已有选中
+            if (!selCtrlKey) {
+                selectedSet.clear();
+            }
+
+            // 碰撞检测：selRect 与卡片均在视口坐标系，直接用 getBoundingClientRect 对比
+            const cards = contentArea.querySelectorAll('.phone-card');
+            cards.forEach(card => {
+                const cr = card.getBoundingClientRect();
+                if (cr.right > selViewport.left && cr.left < selViewport.right &&
+                    cr.bottom > selViewport.top && cr.top < selViewport.bottom) {
+                    const id = Number(card.dataset.id);
+                    if (selCtrlKey) {
+                        if (selectedSet.has(id)) selectedSet.delete(id);
+                        else selectedSet.add(id);
+                    } else {
+                        selectedSet.add(id);
+                    }
+                }
+            });
+
+            updateSelectionUI();
+        }
+
+        mainScroll.addEventListener('mousedown', e => {
+            if (e.button !== 0) return;
+            if (e.target.closest('.phone-card')) return;
+            if (e.target.closest('.ctx-menu')) return;
+
+            selCtrlKey = e.ctrlKey || e.metaKey;
+
+            // 直接存原始 clientX/Y，配合 selRect position:fixed 使用
+            selStartCX = e.clientX;
+            selStartCY = e.clientY;
+            isSelecting = true;
+
+            selRect.style.display = 'block';
+            selRect.style.left = selStartCX + 'px';
+            selRect.style.top = selStartCY + 'px';
+            selRect.style.width = '0px';
+            selRect.style.height = '0px';
+
+            document.addEventListener('mousemove', onSelMouseMove);
+            document.addEventListener('mouseup', onSelMouseUp);
+        });
+
+        // ========== 右键菜单 ==========
+        contentArea.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const card = e.target.closest('.phone-card');
+            const l2Group = e.target.closest('.group-l2');
+
+            // 如果点在卡片上
+            if (card) {
+                const id = Number(card.dataset.id);
+                // 如果该卡片未选中，切换为仅选中该卡片
+                if (!selectedSet.has(id)) {
+                    selectedSet.clear();
+                    selectedSet.add(id);
+                    updateSelectionUI();
+                }
+            }
+
+            // 构建菜单：如果没有选中项，禁用批量操作项
+            const hasSelection = selectedSet.size > 0;
+            const menuItems = appConfig.contextMenu.map(item => {
+                if (item.type === 'divider') return item;
+                // 对于需要选中的操作，无选中时禁用
+                const needsSelection = ['PHONE_BATCH_REPAIR', 'PHONE_BATCH_SCRAP', 'PHONE_EXPORT_SELECTED', 'PHONE_COPY_SN'].includes(item.msgId);
+                if (needsSelection && !hasSelection) {
+                    return { ...item, className: (item.className || '') + ' disabled' };
+                }
+                return item;
+            });
+
+            showContextMenu(e.clientX, e.clientY, menuItems);
+        });
+
+        function showContextMenu(x, y, menuItems) {
+            ctxMenu.innerHTML = menuItems.map(item => {
+                if (item.type === 'divider') return '<div class="divider"></div>';
+                const cls = item.className || '';
+                return `<div class="menu-item ${cls}" data-msgid="${item.msgId}">${item.label}</div>`;
+            }).join('');
+            ctxMenu.classList.add('show');
+            // 定位修正
+            let left = x, top = y;
+            const menuW = ctxMenu.offsetWidth || 180;
+            const menuH = ctxMenu.offsetHeight || 260;
+            if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 4;
+            if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 4;
+            if (left < 0) left = 4;
+            if (top < 0) top = 4;
+            ctxMenu.style.left = left + 'px';
+            ctxMenu.style.top = top + 'px';
+        }
+
+        function hideContextMenu() {
+            ctxMenu.classList.remove('show');
+        }
+
+        ctxMenu.addEventListener('click', e => {
+            const item = e.target.closest('.menu-item');
+            if (!item) return;
+            if (item.classList.contains('disabled')) return;
+            const msgId = item.dataset.msgid;
+
+            // 特殊处理：取消全选不需要选中项
+            if (msgId === 'PHONE_CLEAR_SELECTION') {
+                selectedSet.clear();
+                updateSelectionUI();
+                hideContextMenu();
+                return;
+            }
+
+            // 特殊处理：全选当前组
+            if (msgId === 'PHONE_SELECT_CURRENT_GROUP') {
+                // 找出最后点击的卡片所在 L2 组
+                const lastClicked = contentArea.querySelector('.phone-card.selected');
+                if (lastClicked) {
+                    const l2 = lastClicked.closest('.group-l2');
+                    if (l2) {
+                        l2.querySelectorAll('.phone-card').forEach(c => {
+                            selectedSet.add(Number(c.dataset.id));
+                        });
+                        updateSelectionUI();
+                    }
+                }
+                hideContextMenu();
+                return;
+            }
+
+            const selected = getSelectedItems();
+            if (!selected.length) { hideContextMenu(); return; }
+
+            const cfgItem = appConfig.contextMenu.find(c => c.msgId === msgId);
+            if (!cfgItem || !cfgItem.callback) { hideContextMenu(); return; }
+
+            const payload = cfgItem.callback(selected);
+            sendToParent(msgId, payload);
+            hideContextMenu();
+        });
+
+        document.addEventListener('click', e => {
+            if (!ctxMenu.contains(e.target)) hideContextMenu();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                hideContextMenu();
+                // Esc 也清除选中
+                selectedSet.clear();
+                updateSelectionUI();
+            }
+        });
+
+        // ========== 消息通信 ==========
+        function sendToParent(type, data) {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type, data }, '*');
+            }
+        }
+
+        window.addEventListener('message', function (e) {
+            const msg = e.data;
+            if (!msg || !msg.type) return;
+
+            switch (msg.type) {
+                case MsgType.RES_DATA_PHONE:
+                    allData = Array.isArray(msg.data) ? msg.data : [];
+                    selectedSet.clear();
+                    renderContent();
+                    updateSelectionUI();
+                    break;
+
+                case MsgType.SET_CONFIG:
+                    if (msg.data) {
+                        if (msg.data.groupBy) appConfig.groupBy = { ...appConfig.groupBy, ...msg.data.groupBy };
+                        if (msg.data.cardFields) appConfig.cardFields = msg.data.cardFields;
+                        if (msg.data.contextMenu) appConfig.contextMenu = msg.data.contextMenu;
+                        renderContent();
+                        selectedSet.clear();
+                        updateSelectionUI();
+                    }
+                    break;
+            }
+        });
+
+        // ========== 初始化 ==========
+        renderContent();
+        sendToParent(ReqMsg.REQ_DATA_PHONE, null);
+        window.addEventListener('resize', hideContextMenu);
+    </script>
+</body>
+
+</html>

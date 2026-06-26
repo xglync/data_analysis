@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>不良管理 — 合并视图</title>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #f5f6fa;
+      --surface: #fff;
+      --border: #e1e4e8;
+      --text: #24292e;
+      --text-secondary: #6a737d;
+      --primary: #1a73e8;
+      --primary-light: #e8f0fe;
+      --danger: #d93025;
+      --success: #0d904f;
+      --warning: #f9ab00;
+      --card-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+      --card-selected-border: #1a73e8;
+      --card-selected-bg: #e8f0fe;
+      --drop-highlight: #d4e5ff;
+      --menu-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+      --radius: 4px
+    }
+
+    html,
+    body {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--bg);
+      overflow: hidden
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-secondary);
+      user-select: none;
+      flex-shrink: 0
+    }
+
+    .top-bar .hint {
+      font-size: 11px;
+      opacity: .7
+    }
+
+    .top-bar .back-btn {
+      display: none;
+      padding: 2px 10px;
+      border: 1px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600
+    }
+
+    .top-bar .back-btn:hover {
+      background: var(--primary);
+      color: #fff
+    }
+
+    .split {
+      display: flex;
+      flex: 1;
+      min-height: 0
+    }
+
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-right: 1px solid var(--border)
+    }
+
+    .panel:last-child {
+      border-right: none
+    }
+
+    .panel-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 10px;
+      background: #f0f2f5;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      user-select: none;
+      flex-shrink: 0
+    }
+
+    .panel-hdr .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px
+    }
+
+    .dot-question {
+      background: var(--primary)
+    }
+
+    .dot-phone {
+      background: var(--success)
+    }
+
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      margin-left: 8px
+    }
+
+    .view-toggle button {
+      padding: 1px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .view-toggle button.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary)
+    }
+
+    .phone-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 6px 8px;
+      position: relative
+    }
+
+    .q-wrap {
+      flex: 1;
+      overflow: auto;
+      position: relative
+    }
+
+    .group-l1 {
+      margin-bottom: 8px
+    }
+
+    .group-l1-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: #eef0f4;
+      border-radius: var(--radius) var(--radius) 0 0;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid var(--border)
+    }
+
+    .group-l1-header .arrow {
+      transition: transform .2s;
+      font-size: 10px
+    }
+
+    .group-l1-header .count {
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-weight: 400
+    }
+
+    .group-l1.collapsed .group-l1-body {
+      display: none
+    }
+
+    .group-l1.collapsed .arrow {
+      transform: rotate(-90deg)
+    }
+
+    .group-l1.collapsed .group-l1-header {
+      border-radius: var(--radius)
+    }
+
+    .group-l2 {
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 4px 8px 8px
+    }
+
+    .group-l2-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      padding: 3px 0 5px 0;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 5px
+    }
+
+    .group-l2-header .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--primary)
+    }
+
+    .card-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      max-height: 240px;
+      overflow-y: auto;
+      padding-right: 3px
+    }
+
+    .card-grid::-webkit-scrollbar {
+      width: 4px
+    }
+
+    .card-grid::-webkit-scrollbar-thumb {
+      background: #d0d0d0;
+      border-radius: 2px
+    }
+
+    .phone-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px 8px;
+      cursor: grab;
+      user-select: none;
+      transition: all .15s;
+      box-shadow: var(--card-shadow);
+      width: 24%;
+      min-width: 120px;
+      flex: 0 0 auto;
+      font-size: 11px
+    }
+
+    .phone-card:hover {
+      border-color: #b0b8c4
+    }
+
+    .phone-card.selected {
+      border-color: var(--card-selected-border);
+      background: var(--card-selected-bg);
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, .25)
+    }
+
+    .phone-card.dragging {
+      opacity: .5
+    }
+
+    .phone-card .cr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      line-height: 1.55
+    }
+
+    .phone-card .cr .cl {
+      color: var(--text-secondary);
+      font-size: 11px;
+      min-width: 80px
+    }
+
+    .phone-card .cr .cv {
+      font-weight: 500;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .phone-card .cr .cv.mono {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace
+    }
+
+    .card-status {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600
+    }
+
+    .cs-pending {
+      background: #fef7e0;
+      color: #e37400
+    }
+
+    .cs-repaired {
+      background: #e6f4ea;
+      color: var(--success)
+    }
+
+    .cs-scrapped {
+      background: #fce8e6;
+      color: var(--danger)
+    }
+
+    .phone-tbl-wrap {
+      flex: 1;
+      overflow: auto;
+      display: none
+    }
+
+    .phone-tbl-wrap.active {
+      display: block
+    }
+
+    .phone-tbl-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      min-width: 600px
+    }
+
+    .phone-tbl-wrap thead {
+      position: sticky;
+      top: 0;
+      z-index: 5
+    }
+
+    .phone-tbl-wrap thead th {
+      background: #f0f2f5;
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 4px 6px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      user-select: none
+    }
+
+    .phone-tbl-wrap tbody td {
+      padding: 3px 6px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: default;
+      font-size: 11px
+    }
+
+    .phone-tbl-wrap tbody td.mono {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace
+    }
+
+    .phone-tbl-wrap tbody tr {
+      transition: background .1s
+    }
+
+    .phone-tbl-wrap tbody tr:hover {
+      background: #f6f8fa
+    }
+
+    .phone-tbl-wrap tbody tr.selected {
+      background: var(--card-selected-bg)
+    }
+
+    .phone-tbl-wrap tbody tr.dragging {
+      opacity: .5
+    }
+
+    .phone-tbl-wrap tbody tr.drop-target {
+      background: var(--drop-highlight);
+      outline: 2px dashed var(--primary);
+      outline-offset: -2px
+    }
+
+    .q-wrap table {
+      border-collapse: collapse;
+      table-layout: fixed
+    }
+
+    .q-wrap thead {
+      position: sticky;
+      top: 0;
+      z-index: 5
+    }
+
+    .q-wrap thead th {
+      background: #f0f2f5;
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 5px 8px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      user-select: none
+    }
+
+    .q-wrap tbody td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: default
+    }
+
+    .q-wrap tbody tr {
+      transition: background .1s
+    }
+
+    .q-wrap tbody tr:hover {
+      background: #f6f8fa
+    }
+
+    .q-wrap tbody tr.selected {
+      background: var(--card-selected-bg)
+    }
+
+    .q-wrap tbody tr.drop-target {
+      background: var(--drop-highlight);
+      outline: 2px dashed var(--primary);
+      outline-offset: -2px
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.5
+    }
+
+    .badge-high {
+      background: #fce8e6;
+      color: var(--danger)
+    }
+
+    .badge-medium {
+      background: #fef7e0;
+      color: #e37400
+    }
+
+    .badge-low {
+      background: #e6f4ea;
+      color: var(--success)
+    }
+
+    .status-tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 500
+    }
+
+    .status-pending {
+      background: #fef7e0;
+      color: #e37400
+    }
+
+    .status-processing {
+      background: #e8f0fe;
+      color: var(--primary)
+    }
+
+    .status-resolved {
+      background: #e6f4ea;
+      color: var(--success)
+    }
+
+    .sel-rect {
+      position: fixed;
+      border: 1px dashed var(--primary);
+      background: rgba(26, 115, 232, .08);
+      pointer-events: none;
+      z-index: 10;
+      display: none
+    }
+
+    .ctx-menu {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      min-width: 140px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--menu-shadow);
+      padding: 4px 0;
+      font-size: 12px
+    }
+
+    .ctx-menu.show {
+      display: block
+    }
+
+    .ctx-menu .menu-item {
+      padding: 6px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .1s;
+      color: var(--text)
+    }
+
+    .ctx-menu .menu-item:hover {
+      background: var(--primary-light);
+      color: var(--primary)
+    }
+
+    .ctx-menu .menu-item.danger {
+      color: var(--danger)
+    }
+
+    .ctx-menu .menu-item.danger:hover {
+      background: #fce8e6
+    }
+
+    .ctx-menu .menu-item.disabled {
+      color: #bbb;
+      pointer-events: none
+    }
+
+    .ctx-menu .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0
+    }
+
+    .phone-scroll::-webkit-scrollbar,
+    .q-wrap::-webkit-scrollbar,
+    .phone-tbl-wrap::-webkit-scrollbar {
+      width: 5px;
+      height: 5px
+    }
+
+    .phone-scroll::-webkit-scrollbar-thumb,
+    .q-wrap::-webkit-scrollbar-thumb,
+    .phone-tbl-wrap::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px
+    }
+
+    .drag-ghost {
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      padding: 6px 12px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 9999
+    }
+
+    ._tt {
+      position: fixed;
+      z-index: 9998;
+      max-width: 400px;
+      padding: 6px 10px;
+      background: #333;
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: normal;
+      word-break: break-all;
+      user-select: text;
+      cursor: auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+      opacity: 0;
+      transition: opacity .12s
+    }
+
+    ._tt.show {
+      opacity: 1
+    }
+
+    .detail-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--primary);
+      font-size: 12px;
+      color: var(--primary);
+      flex-shrink: 0
+    }
+
+    .detail-banner.show {
+      display: flex
+    }
+
+    .detail-banner .close-detail {
+      margin-left: auto;
+      padding: 1px 10px;
+      border: 1px solid var(--primary);
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--primary);
+      cursor: pointer;
+      font-size: 11px
+    }
+
+    .detail-banner .close-detail:hover {
+      background: var(--primary);
+      color: #fff
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="top-bar">
+    <span>不良管理 — 合并视图</span>
+    <span class="hint">拖拽手机→问题 | Ctrl+复选 | 右键菜单 | 双击问题查关联手机</span>
+    <button class="back-btn" id="backBtn" onclick="window._detailBack()">← 返回</button>
+  </div>
+
+  <div class="split">
+    <!-- 左侧：问题 -->
+    <div class="panel" id="qPanel">
+      <div class="panel-hdr"><span><span class="dot dot-question"></span>不良问题 — 共 <b id="qTotal">0</b> 条，已选 <b
+            id="qSelNum" style="color:var(--primary)">0</b></span></div>
+      <div class="q-wrap" id="qWrap">
+        <table id="qTable">
+          <thead id="qHead"></thead>
+          <tbody id="qBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 右侧：手机 -->
+    <div class="panel" id="pPanel">
+      <div class="panel-hdr">
+        <span><span class="dot dot-phone"></span>不良手机 — 共 <b id="pTotal">0</b> 台，已选 <b id="pSelNum"
+            style="color:var(--primary)">0</b></span>
+        <div class="view-toggle">
+          <button id="viewGrid" class="active" onclick="window._phonePanel.switchView('grid')">▦ 卡片</button>
+          <button id="viewTable" onclick="window._phonePanel.switchView('table')">☰ 表格</button>
+        </div>
+      </div>
+      <div class="detail-banner" id="detailBanner">
+        📌 正在查看问题关联的不良机 <button class="close-detail" onclick="window._detailBack()">✕ 关闭详情</button>
+      </div>
+      <div class="phone-scroll" id="pScroll">
+        <div id="pContent"></div>
+        <div class="sel-rect" id="pSelRect"></div>
+      </div>
+      <div class="phone-tbl-wrap" id="pTblWrap">
+        <table id="pTbl">
+          <thead id="pTblHead"></thead>
+          <tbody id="pTblBody"></tbody>
+        </table>
+        <div class="sel-rect" id="pTblSelRect"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctx-menu" id="ctxMenu"></div>
+  <div class="drag-ghost" id="dragGhost">拖拽 0 台</div>
+
+  <script>
+    // ============================================================
+    // 实例 ID（支持单页多实例互不干扰 + 消息精准路由）
+    // ============================================================
+    const INST = (() => {
+      const hash = location.hash.match(/id=([^&]+)/);
+      return hash ? hash[1] : 'inst_' + Math.random().toString(36).slice(2, 8);
+    })();
+
+    function sendToParent(type, data) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type, data, instanceId: INST }, '*');
+      }
+    }
+
+    const escHtml = s => { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; };
+
+    // ============================================================
+    // 全局右键菜单
+    // ============================================================
+    const ctxMenu = document.getElementById('ctxMenu');
+    let ctxSourcePanel = null;
+
+    function showCtx(x, y, items) {
+      ctxMenu.innerHTML = items.map(it => {
+        if (it.type === 'divider') return '<div class="divider"></div>';
+        return '<div class="menu-item ' + (it.className || '') + '" data-msgid="' + it.msgId + '">' + it.label + '</div>';
+      }).join('');
+      ctxMenu.classList.add('show');
+      let l = x, t = y;
+      const mw = ctxMenu.offsetWidth || 150, mh = ctxMenu.offsetHeight || 250;
+      if (l + mw > innerWidth) l = innerWidth - mw - 4;
+      if (t + mh > innerHeight) t = innerHeight - mh - 4;
+      ctxMenu.style.left = Math.max(4, l) + 'px'; ctxMenu.style.top = Math.max(4, t) + 'px';
+    }
+    function hideCtx() { ctxMenu.classList.remove('show'); ctxSourcePanel = null; }
+    ctxMenu.addEventListener('click', e => {
+      const el = e.target.closest('.menu-item');
+      if (!el || el.classList.contains('disabled')) return;
+      if (ctxSourcePanel && ctxSourcePanel.onMenuAction) ctxSourcePanel.onMenuAction(el.dataset.msgid);
+      hideCtx();
+    });
+    document.addEventListener('click', e => { if (!ctxMenu.contains(e.target)) hideCtx(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtx(); });
+
+    // ============================================================
+    // 字段映射 (v2.0)
+    // KEY         LABEL
+    // id           编号
+    // type         问题类型
+    // problem      问题描述
+    // level        严重程度
+    // station      工位
+    // status       状态
+    // create_time  创建日期
+    // incharge     责任人
+    //
+    // barcode      不良条码
+    // remark       不良备注
+    // analysis     分析情况
+    // problem_id   关联问题ID
+    // entry_time   不良录入时间
+    // ============================================================
+    const PHONE_CFG = {
+      groupBy: { level1: 'station', level2: 'analysis' },
+      cardFields: [
+        { key: 'barcode', label: '不良条码', mono: true },
+        { key: 'model', label: '机型' },
+        { key: 'status', label: '状态', render: 'status' },
+        { key: 'line', label: '产线' },
+        { key: 'operator', label: '操作员' },
+        { key: 'entry_time', label: '录入时间' }
+      ],
+      tblFields: [
+        { key: 'barcode', label: '不良条码', mono: true, width: '130px' },
+        { key: 'model', label: '机型', width: '90px' },
+        { key: 'remark', label: '不良备注', width: 'auto' },
+        { key: 'analysis', label: '分析情况', width: '100px' },
+        { key: 'status', label: '状态', render: 'status', width: '70px' },
+        { key: 'station', label: '工位', width: '90px' },
+        { key: 'line', label: '产线', width: '60px' },
+        { key: 'operator', label: '操作员', width: '70px' },
+        { key: 'entry_time', label: '录入时间', width: '110px' }
+      ],
+      contextMenu: [
+        { label: '🔧 批量报修', msgId: 'PHONE_BATCH_REPAIR', callback: s => ({ ids: s.map(x => x.id), action: 'repair' }) },
+        { label: '🗑 批量报废', msgId: 'PHONE_BATCH_SCRAP', callback: s => ({ ids: s.map(x => x.id), action: 'scrap' }), className: 'danger' },
+        { type: 'divider' },
+        { label: '📤 导出选中', msgId: 'PHONE_EXPORT_SELECTED', callback: s => ({ ids: s.map(x => x.id), action: 'export' }) },
+        { label: '📋 复制条码', msgId: 'PHONE_COPY_SN', callback: s => ({ barcodes: s.map(x => x.barcode).join('\n'), action: 'copy' }) },
+        { type: 'divider' },
+        { label: '☑ 全选本组', msgId: 'PHONE_SELECT_CURRENT_GROUP' },
+        { label: '▢ 取消全选', msgId: 'PHONE_CLEAR_SELECTION' }
+      ]
+    };
+
+    const QUESTION_CFG = {
+      fields: [
+        { key: 'id', label: '编号', width: '55px' },
+        { key: 'type', label: '问题类型', width: '80px' },
+        { key: 'problem', label: '问题描述', width: 'auto' },
+        { key: 'level', label: '严重程度', width: '70px', render: 'badge' },
+        { key: 'station', label: '工位', width: '80px' },
+        { key: 'status', label: '状态', width: '70px', render: 'status' },
+        { key: 'create_time', label: '创建日期', width: '90px' },
+        { key: 'incharge', label: '责任人', width: '70px' }
+      ],
+      contextMenu: [
+        { label: '🔍 查看详情', msgId: 'QUESTION_DETAIL', callback: s => ({ ids: s.map(x => x.id), action: 'detail' }) },
+        { label: '✅ 标记已处理', msgId: 'QUESTION_MARK_RESOLVED', callback: s => ({ ids: s.map(x => x.id), action: 'resolve' }) },
+        { label: '👤 分配责任人', msgId: 'QUESTION_ASSIGN', callback: s => ({ ids: s.map(x => x.id), action: 'assign' }) },
+        { type: 'divider' },
+        { label: '📤 导出', msgId: 'QUESTION_EXPORT', callback: s => ({ ids: s.map(x => x.id), action: 'export' }) },
+        { type: 'divider' },
+        { label: '🗑 删除', msgId: 'QUESTION_DELETE', callback: s => ({ ids: s.map(x => x.id), action: 'delete' }), className: 'danger' }
+      ]
+    };
+
+    // ============================================================
+    // 状态回溯栈（详情 → 返回，不重新加载数据）
+    // ============================================================
+    const _stateStack = [];
+    function _pushState(pp) {
+      _stateStack.push({
+        data: pp._fullData.slice(),
+        selected: new Set(pp.selected),
+        scrollTop: document.getElementById('pScroll').scrollTop,
+        viewMode: pp._viewMode
+      });
+    }
+    window._detailBack = function () {
+      const pp = window._phonePanel;
+      const prev = _stateStack.pop();
+      if (!prev) return;
+      pp._fullData = prev.data;
+      pp.selected = prev.selected;
+      pp._viewMode = prev.viewMode;
+      pp.render();
+      document.getElementById('pScroll').scrollTop = prev.scrollTop;
+      document.getElementById('detailBanner').classList.remove('show');
+      document.getElementById('backBtn').style.display = 'none';
+      document.getElementById('pTotal').textContent = prev.data.length;
+      pp.updateSelectionUI();
+    };
+
+    // ============================================================
+    // BasePanel
+    // ============================================================
+    class BasePanel {
+      constructor(totalElId, selNumElId) {
+        this.data = []; this.selected = new Set();
+        this.totalEl = document.getElementById(totalElId);
+        this.selNumEl = document.getElementById(selNumElId);
+        this.config = {};
+      }
+      render() { throw new Error('Not implemented'); }
+      updateSelectionUI() { throw new Error('Not implemented'); }
+      getSelectedItems() {
+        return Array.from(this.selected).map(id => this.data.find(d => d.id === id)).filter(Boolean);
+      }
+      receiveData(data) { this.data = Array.isArray(data) ? data : []; this.selected.clear(); this.render(); }
+      onMenuAction(msgId) { }
+    }
+
+    // ============================================================
+    // QuestionPanel
+    // ============================================================
+    class QuestionPanel extends BasePanel {
+      constructor() {
+        super('qTotal', 'qSelNum');
+        this.config = QUESTION_CFG;
+        this._init();
+      }
+      _calcW() { return this.config.fields.reduce((s, f) => s + (f.width && f.width !== 'auto' ? parseInt(f.width) : 120), 0); }
+      _cell(row, f) {
+        const v = row[f.key] ?? '';
+        if (f.render === 'badge') {
+          const m = { '高': 'badge-high', '中': 'badge-medium', '低': 'badge-low' };
+          return '<span class="badge ' + (m[v] || 'badge-low') + '">' + escHtml(v) + '</span>';
+        }
+        if (f.render === 'status') {
+          const m = { '待处理': 'status-pending', '处理中': 'status-processing', '已处理': 'status-resolved', '已关闭': 'status-resolved' };
+          return '<span class="status-tag ' + (m[v] || '') + '">' + escHtml(v) + '</span>';
+        }
+        return escHtml(String(v));
+      }
+      render() {
+        this.totalEl.textContent = this.data.length; this.selNumEl.textContent = this.selected.size;
+        const h = document.getElementById('qHead'), b = document.getElementById('qBody');
+        const tbl = document.getElementById('qTable'), w = document.getElementById('qWrap');
+        if (!this.data.length) { h.innerHTML = ''; b.innerHTML = ''; return; }
+        tbl.style.minWidth = Math.max(this._calcW(), w.clientWidth) + 'px';
+        h.innerHTML = '<tr>' + this.config.fields.map(f => '<th style="' + (f.width !== 'auto' ? 'width:' + f.width : '') + '">' + f.label + '</th>').join('') + '</tr>';
+        b.innerHTML = this.data.map(row => {
+          const s = this.selected.has(row.id) ? ' selected' : '';
+          return '<tr class="q-row' + s + '" data-id="' + row.id + '">' + this.config.fields.map(f => '<td>' + this._cell(row, f) + '</td>').join('') + '</tr>';
+        }).join('');
+      }
+      updateSelectionUI() {
+        this.selNumEl.textContent = this.selected.size;
+        document.getElementById('qBody').querySelectorAll('.q-row').forEach(tr => tr.classList.toggle('selected', this.selected.has(Number(tr.dataset.id))));
+      }
+      _init() {
+        const wrap = document.getElementById('qWrap'), body = document.getElementById('qBody');
+        const self = this;
+        wrap.addEventListener('click', e => {
+          if (e.target.closest('.ctx-menu')) return;
+          const tr = e.target.closest('.q-row');
+          if (tr) {
+            const id = Number(tr.dataset.id);
+            if (e.ctrlKey || e.metaKey) { self.selected.has(id) ? self.selected.delete(id) : self.selected.add(id); }
+            else { self.selected.clear(); self.selected.add(id); }
+            self.updateSelectionUI(); return;
+          }
+          self.selected.clear(); self.updateSelectionUI();
+        });
+        body.addEventListener('dblclick', e => {
+          const tr = e.target.closest('.q-row');
+          if (!tr) return;
+          const id = Number(tr.dataset.id);
+          const q = self.data.find(x => x.id === id);
+          if (!q) return;
+          self.selected.clear(); self.selected.add(id); self.updateSelectionUI();
+          sendToParent('QUESTION_QUERY_PHONES', { questionId: id, question: { id: q.id, type: q.type, problem: q.problem, station: q.station } });
+        });
+        body.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          const tr = e.target.closest('.q-row');
+          if (tr) { const id = Number(tr.dataset.id); if (!self.selected.has(id)) { self.selected.clear(); self.selected.add(id); self.updateSelectionUI(); } }
+          ctxSourcePanel = self; showCtx(e.clientX, e.clientY, self.config.contextMenu);
+        });
+      }
+      onMenuAction(msgId) {
+        const sel = this.getSelectedItems(); if (!sel.length) return;
+        const cfg = this.config.contextMenu.find(c => c.msgId === msgId);
+        if (cfg && cfg.callback) sendToParent(msgId, cfg.callback(sel));
+      }
+      findDropTarget(el) { return el.closest('.q-row'); }
+      get dropHighlightClass() { return 'drop-target'; }
+      getQuestionByRow(tr) { const id = Number(tr.dataset.id); return this.data.find(q => q.id === id) || null; }
+    }
+
+    // ============================================================
+    // Phone 渲染策略（渲染/操作解耦）
+    // ============================================================
+    class PhoneGridRenderer {
+      constructor(panel) { this.panel = panel; }
+      get container() { return document.getElementById('pContent'); }
+      render() {
+        const p = this.panel; const d = p._fullData;
+        if (!d.length) { this.container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">📱 等待数据...</div>'; return; }
+        const l1k = PHONE_CFG.groupBy.level1, l2k = PHONE_CFG.groupBy.level2;
+        const map = new Map();
+        for (const it of d) {
+          const k1 = it[l1k] || '(未分类)', k2 = it[l2k] || '(未分类)';
+          if (!map.has(k1)) map.set(k1, new Map());
+          if (!map.get(k1).has(k2)) map.get(k1).set(k2, []);
+          map.get(k1).get(k2).push(it);
+        }
+        let html = '';
+        for (const [l1, l2map] of map) {
+          let c1 = 0; for (const xs of l2map.values()) c1 += xs.length;
+          html += '<div class="group-l1"><div class="group-l1-header" data-action="toggle-l1"><span class="arrow">▼</span>' + escHtml(l1) + ' <span class="count">(' + c1 + '台)</span></div><div class="group-l1-body">';
+          for (const [l2, items] of l2map) {
+            html += '<div class="group-l2"><div class="group-l2-header"><span class="dot"></span>' + escHtml(l2) + ' (' + items.length + '台)</div><div class="card-grid">';
+            for (const it of items) {
+              const sel = p.selected.has(it.id) ? ' selected' : '';
+              html += '<div class="phone-card' + sel + '" data-id="' + it.id + '" draggable="true">';
+              for (const f of PHONE_CFG.cardFields) {
+                const v = it[f.key] ?? '', mc = f.mono ? ' mono' : '';
+                html += '<div class="cr"><span class="cl">' + f.label + '</span><span class="cv' + mc + '">' + this._val(v, f) + '</span></div>';
+              }
+              html += '</div>';
+            }
+            html += '</div></div>';
+          }
+          html += '</div></div>';
+        }
+        this.container.innerHTML = html;
+      }
+      _val(v, f) {
+        if (f.render === 'status') { const m = { '待维修': 'cs-pending', '已维修': 'cs-repaired', '已报废': 'cs-scrapped' }; return '<span class="card-status ' + (m[v] || '') + '">' + escHtml(v) + '</span>'; }
+        return escHtml(String(v));
+      }
+      updateSelection() { this.panel.selNumEl.textContent = this.panel.selected.size; this.container.querySelectorAll('.phone-card').forEach(c => c.classList.toggle('selected', this.panel.selected.has(Number(c.dataset.id)))); }
+      getItems() { return this.container.querySelectorAll('.phone-card'); }
+      findItem(el) { return el.closest('.phone-card'); }
+      getSel() { return '.phone-card'; }
+      setDragVisual(on) { this.container.querySelectorAll('.phone-card.selected').forEach(c => c.classList.toggle('dragging', on)); }
+    }
+
+    class PhoneTableRenderer {
+      constructor(panel) { this.panel = panel; }
+      get container() { return document.getElementById('pTblBody'); }
+      render() {
+        const p = this.panel; const d = p._fullData;
+        const h = document.getElementById('pTblHead'), b = this.container;
+        if (!d.length) { h.innerHTML = ''; b.innerHTML = ''; return; }
+        const fs = PHONE_CFG.tblFields;
+        h.innerHTML = '<tr>' + fs.map(f => '<th style="' + (f.width !== 'auto' ? 'width:' + f.width : '') + '">' + f.label + '</th>').join('') + '</tr>';
+        b.innerHTML = d.map(row => {
+          const sel = p.selected.has(row.id) ? ' selected' : '';
+          return '<tr class="phone-row' + sel + '" data-id="' + row.id + '" draggable="true">' + fs.map(f => {
+            const v = row[f.key] ?? '', mc = f.mono ? ' mono' : '';
+            return '<td class="' + (mc ? 'mono' : '') + '">' + this._val(v, f) + '</td>';
+          }).join('') + '</tr>';
+        }).join('');
+      }
+      _val(v, f) {
+        if (f.render === 'status') { const m = { '待维修': 'cs-pending', '已维修': 'cs-repaired', '已报废': 'cs-scrapped' }; return '<span class="card-status ' + (m[v] || '') + '">' + escHtml(v) + '</span>'; }
+        return escHtml(String(v));
+      }
+      updateSelection() { this.panel.selNumEl.textContent = this.panel.selected.size; this.container.querySelectorAll('.phone-row').forEach(tr => tr.classList.toggle('selected', this.panel.selected.has(Number(tr.dataset.id)))); }
+      getItems() { return this.container.querySelectorAll('.phone-row'); }
+      findItem(el) { return el.closest('.phone-row'); }
+      getSel() { return '.phone-row'; }
+      setDragVisual(on) { this.container.querySelectorAll('.phone-row.selected').forEach(c => c.classList.toggle('dragging', on)); }
+    }
+
+    // ============================================================
+    // PhonePanel（重构版）
+    // ============================================================
+    class PhonePanel extends BasePanel {
+      constructor() {
+        super('pTotal', 'pSelNum');
+        this.config = PHONE_CFG;
+        this._fullData = [];
+        this._viewMode = 'grid';
+        this._grid = new PhoneGridRenderer(this);
+        this._tbl = new PhoneTableRenderer(this);
+        this._sel = { ing: false, cx: 0, cy: 0, ctrl: false, wasDrag: false, timer: null };
+        this._initEvents();
+      }
+      get _R() { return this._viewMode === 'grid' ? this._grid : this._tbl; }
+
+      render() {
+        this.data = this._fullData; this.totalEl.textContent = this._fullData.length;
+        this._R.render();
+        document.getElementById('pScroll').style.display = this._viewMode === 'grid' ? '' : 'none';
+        document.getElementById('pTblWrap').classList.toggle('active', this._viewMode === 'table');
+        document.getElementById('viewGrid').classList.toggle('active', this._viewMode === 'grid');
+        document.getElementById('viewTable').classList.toggle('active', this._viewMode === 'table');
+        this._R.updateSelection();
+      }
+      receiveData(data) { this._fullData = Array.isArray(data) ? data : []; this.selected.clear(); this.render(); }
+      receiveFilteredData(data) {
+        _pushState(this);
+        this._fullData = Array.isArray(data) ? data : []; this.selected.clear(); this.render();
+        document.getElementById('detailBanner').classList.add('show');
+        document.getElementById('backBtn').style.display = '';
+      }
+      updateSelectionUI() { this._R.updateSelection(); }
+      switchView(mode) { if (this._viewMode === mode) return; this._viewMode = mode; this.render(); }
+      getSelectedItems() { return Array.from(this.selected).map(id => this._fullData.find(d => d.id === id)).filter(Boolean); }
+
+      _initEvents() {
+        const pScroll = document.getElementById('pScroll'), pTbl = document.getElementById('pTblWrap'),
+          selRect = document.getElementById('pSelRect'), tblSelRect = document.getElementById('pTblSelRect');
+        const self = this;
+
+        // click
+        pScroll.addEventListener('click', e => { if (self._viewMode !== 'grid') return; self._onClick(e, pScroll); });
+        pTbl.addEventListener('click', e => { if (self._viewMode !== 'table') return; self._onClick(e, pTbl); });
+
+        // dblclick
+        pScroll.addEventListener('dblclick', e => { if (self._viewMode !== 'grid' || self._sel.wasDrag) return; self._onDblClick(e); });
+        pTbl.addEventListener('dblclick', e => { if (self._viewMode !== 'table' || self._sel.wasDrag) return; self._onDblClick(e); });
+
+        // contextmenu
+        pScroll.addEventListener('contextmenu', e => { if (self._viewMode !== 'grid') return; e.preventDefault(); self._ctx(e); });
+        pTbl.addEventListener('contextmenu', e => { if (self._viewMode !== 'table') return; e.preventDefault(); self._ctx(e); });
+
+        // box select (grid + table)
+        this._boxSelect(pScroll, selRect, 'grid');
+        this._boxSelect(pTbl, tblSelRect, 'table');
+        // drag source
+        this._dragSrc(pScroll); this._dragSrc(pTbl);
+      }
+
+      _onClick(e, scrollEl) {
+        if (this._sel.wasDrag) return;
+        if (e.target.closest('.ctx-menu')) return;
+        const item = this._R.findItem(e.target);
+        if (item) {
+          const id = Number(item.dataset.id);
+          if (e.ctrlKey || e.metaKey) { this.selected.has(id) ? this.selected.delete(id) : this.selected.add(id); }
+          else { this.selected.clear(); this.selected.add(id); }
+          this.updateSelectionUI(); return;
+        }
+        if (this._viewMode === 'grid') {
+          const hdr = e.target.closest('[data-action="toggle-l1"]');
+          if (hdr) { const g = hdr.closest('.group-l1'); if (g) g.classList.toggle('collapsed'); return; }
+        }
+        this.selected.clear(); this.updateSelectionUI();
+      }
+
+      _onDblClick(e) {
+        const item = this._R.findItem(e.target);
+        if (!item) return;
+        const id = Number(item.dataset.id);
+        this.selected.clear(); this.selected.add(id); this.updateSelectionUI();
+        sendToParent('PHONE_DBLCLICK', { phoneIds: [id], ids: [id], action: 'double_click' });
+      }
+
+      _ctx(e) {
+        const item = this._R.findItem(e.target);
+        if (item) { const id = Number(item.dataset.id); if (!this.selected.has(id)) { this.selected.clear(); this.selected.add(id); this.updateSelectionUI(); } }
+        ctxSourcePanel = this;
+        const has = this.selected.size > 0;
+        const items = this.config.contextMenu.map(it => {
+          if (it.type === 'divider') return it;
+          if (['PHONE_BATCH_REPAIR', 'PHONE_BATCH_SCRAP', 'PHONE_EXPORT_SELECTED', 'PHONE_COPY_SN'].includes(it.msgId) && !has)
+            return { ...it, className: (it.className || '') + ' disabled' };
+          return it;
+        });
+        showCtx(e.clientX, e.clientY, items);
+      }
+
+      _boxSelect(scroll, selRect, mode) {
+        const self = this;
+        scroll.addEventListener('mousedown', e => {
+          if (e.button !== 0 || self._viewMode !== mode) return;
+          if (e.target.closest('.ctx-menu')) return;
+
+          const item = self._R.findItem(e.target);
+
+          // 卡片模式额外排除标题点击；两种模式统一：已选中项 → 留给拖拽/点击
+          if (mode === 'grid' && e.target.closest('.group-l1-header')) return;
+          if (item && item.classList.contains('selected')) return;
+
+          self._sel.cx = e.clientX; self._sel.cy = e.clientY; self._sel.ing = true; self._sel.ctrl = e.ctrlKey || e.metaKey;
+          selRect.style.display = 'block'; selRect.style.left = e.clientX + 'px'; selRect.style.top = e.clientY + 'px';
+          selRect.style.width = '0px'; selRect.style.height = '0px';
+          document.addEventListener('mousemove', onMv); document.addEventListener('mouseup', onUp);
+        });
+        const onMv = e => { if (!self._sel.ing) return; const x = Math.min(self._sel.cx, e.clientX), y = Math.min(self._sel.cy, e.clientY); selRect.style.left = x + 'px'; selRect.style.top = y + 'px'; selRect.style.width = Math.abs(e.clientX - self._sel.cx) + 'px'; selRect.style.height = Math.abs(e.clientY - self._sel.cy) + 'px'; };
+        const onUp = e => {
+          if (!self._sel.ing) return; self._sel.ing = false;
+          document.removeEventListener('mousemove', onMv); document.removeEventListener('mouseup', onUp);
+          const vr = selRect.getBoundingClientRect(); selRect.style.display = 'none';
+          if (vr.width < 4 && vr.height < 4) return;
+          self._sel.wasDrag = true; clearTimeout(self._sel.timer); self._sel.timer = setTimeout(() => { self._sel.wasDrag = false; }, 0);
+          if (!self._sel.ctrl) self.selected.clear();
+          self._R.getItems().forEach(el => { const cr = el.getBoundingClientRect(); if (cr.right > vr.left && cr.left < vr.right && cr.bottom > vr.top && cr.top < vr.bottom) { const id = Number(el.dataset.id); self._sel.ctrl ? (self.selected.has(id) ? self.selected.delete(id) : self.selected.add(id)) : self.selected.add(id); } });
+          self.updateSelectionUI();
+        };
+      }
+
+      _dragSrc(scroll) {
+        const self = this;
+        scroll.addEventListener('dragstart', e => {
+          const item = self._R.findItem(e.target); if (!item) { e.preventDefault(); return; }
+          const id = Number(item.dataset.id); if (!self.selected.has(id)) { self.selected.clear(); self.selected.add(id); self.updateSelectionUI(); }
+          const phones = self.getSelectedItems(); if (!phones.length) { e.preventDefault(); return; }
+          const payload = { phoneIds: phones.map(p => p.id), phones: phones.map(p => ({ id: p.id, barcode: p.barcode, model: p.model, station: p.station, analysis: p.analysis })) };
+          e.dataTransfer.setData('application/json', JSON.stringify(payload)); e.dataTransfer.effectAllowed = 'link';
+          const gh = document.getElementById('dragGhost'); gh.textContent = '📱 拖拽 ' + payload.phoneIds.length + ' 台 → 问题'; e.dataTransfer.setDragImage(gh, 0, 0);
+          self._R.setDragVisual(true);
+        });
+        scroll.addEventListener('dragend', () => { self._R.setDragVisual(false); });
+      }
+
+      onMenuAction(msgId) {
+        if (msgId === 'PHONE_CLEAR_SELECTION') { this.selected.clear(); this.updateSelectionUI(); return; }
+        if (msgId === 'PHONE_SELECT_CURRENT_GROUP') {
+          const el = (this._viewMode === 'grid' ? document.getElementById('pContent') : document.getElementById('pTblBody')).querySelector(this._R.getSel() + '.selected');
+          if (el && this._viewMode === 'grid') { const l2 = el.closest('.group-l2'); if (l2) l2.querySelectorAll(this._R.getSel()).forEach(c => this.selected.add(Number(c.dataset.id))); this.updateSelectionUI(); }
+          return;
+        }
+        const sel = this.getSelectedItems(); if (!sel.length) return;
+        const cfg = this.config.contextMenu.find(c => c.msgId === msgId);
+        if (cfg && cfg.callback) sendToParent(msgId, cfg.callback(sel));
+      }
+
+      getDragPayload() { const p = this.getSelectedItems(); return { phoneIds: p.map(x => x.id), phones: p.map(x => ({ id: x.id, barcode: x.barcode, model: x.model, station: x.station, analysis: x.analysis })) }; }
+      ensureCardSelected(el) { const id = Number(el.dataset.id); if (!this.selected.has(id)) { this.selected.clear(); this.selected.add(id); this.updateSelectionUI(); } }
+      setDraggingVisual(on) { this._R.setDragVisual(on); }
+    }
+
+    // ============================================================
+    // DragBridge
+    // ============================================================
+    class DragBridge {
+      constructor(source, target, onDrop, ghostEl) { this.S = source; this.T = target; this._onDrop = onDrop; this._gh = ghostEl; this._setup(); }
+      _setup() {
+        const self = this;
+        [document.getElementById('pScroll'), document.getElementById('pTblWrap')].forEach(el => {
+          el.addEventListener('dragstart', e => {
+            const item = self.S._R.findItem(e.target); if (!item) { e.preventDefault(); return; }
+            self.S.ensureCardSelected(item); const p = self.S.getDragPayload(); if (!p.phoneIds.length) { e.preventDefault(); return; }
+            e.dataTransfer.setData('application/json', JSON.stringify(p)); e.dataTransfer.effectAllowed = 'link';
+            self._gh.textContent = '📱 拖拽 ' + p.phoneIds.length + ' 台 → 问题'; e.dataTransfer.setDragImage(self._gh, 0, 0);
+            self.S.setDraggingVisual(true);
+          });
+          el.addEventListener('dragend', () => { self.S.setDraggingVisual(false); });
+        });
+        const tBody = document.getElementById('qBody');
+        tBody.addEventListener('dragover', e => { const tr = self.T.findDropTarget(e.target); if (!tr) return; e.preventDefault(); e.dataTransfer.dropEffect = 'link'; tr.classList.add(self.T.dropHighlightClass); });
+        tBody.addEventListener('dragleave', e => { const tr = self.T.findDropTarget(e.target); if (tr) tr.classList.remove(self.T.dropHighlightClass); });
+        tBody.addEventListener('drop', e => { e.preventDefault(); const tr = self.T.findDropTarget(e.target); if (!tr) return; tr.classList.remove(self.T.dropHighlightClass); try { const raw = e.dataTransfer.getData('application/json'); if (!raw) return; const payload = JSON.parse(raw); const q = self.T.getQuestionByRow(tr); if (!q) return; self._onDrop(payload, q); } catch (ex) { } });
+      }
+    }
+
+    // ============================================================
+    // TooltipManager
+    // ============================================================
+    class TooltipManager {
+      constructor(opts = {}) { this.d = opts.delay ?? 300; this.hd = opts.hideDelay ?? 200; this.ox = opts.offsetX ?? 6; this.oy = opts.offsetY ?? 10; this._el = null; this._st = null; this._ht = null; this._onS = false; this._onT = false; this._px = 0; this._py = 0; }
+      _ens() { if (!this._el) { this._el = document.createElement('div'); this._el.className = '_tt'; document.body.appendChild(this._el); this._el.addEventListener('mouseenter', () => { this._onT = true; clearTimeout(this._ht); }); this._el.addEventListener('mouseleave', () => { this._onT = false; this._tryH(); }); } return this._el; }
+      _place(cx, cy) { const r = this._el.getBoundingClientRect(), w = r.width || 200, h = r.height || 30; let x = cx + this.ox, y = cy + this.oy; if (x + w > innerWidth) x = innerWidth - w - 4; if (y + h > innerHeight) y = cy - h - this.oy; this._px = Math.max(4, x); this._py = Math.max(4, y); this._el.style.left = this._px + 'px'; this._el.style.top = this._py + 'px'; }
+      _tryS(t, gf, cx, cy) { clearTimeout(this._ht); const self = this; self._st = setTimeout(() => { self._el.textContent = gf ? gf(t) : t.textContent; self._el.offsetHeight; self._place(cx, cy); self._el.classList.add('show'); }, self.d); }
+      _tryH() { clearTimeout(this._st); if (this._onT) return; const self = this; self._ht = setTimeout(() => { if (!self._onS && !self._onT) self._el.classList.remove('show'); }, self.hd); }
+      attach(ctr, sel, gf) {
+        const self = this, el = this._ens();
+        ctr.addEventListener('mouseenter', e => { const t = e.target.closest(sel); if (!t || (t.scrollWidth <= t.clientWidth && t.scrollHeight <= t.clientHeight)) return; self._onS = true; self._tryS(t, gf, e.clientX, e.clientY); }, true);
+        ctr.addEventListener('mouseleave', e => { if (!e.target.closest(sel)) return; self._onS = false; self._tryH(); }, true);
+        document.addEventListener('mousemove', e => { if (!el.classList.contains('show')) return; if (self._onS && !self._onT) self._place(e.clientX, e.clientY); });
+      }
+    }
+
+    // ============================================================
+    // 实例化
+    // ============================================================
+    const questionPanel = new QuestionPanel();
+    const phonePanel = new PhonePanel();
+    window._phonePanel = phonePanel;
+
+    new DragBridge(phonePanel, questionPanel, (payload, question) => {
+      sendToParent('PHONE_TO_QUESTION', {
+        phoneIds: payload.phoneIds, questionId: question.id,
+        phones: payload.phones,
+        question: { id: question.id, type: question.type, problem: question.problem, station: question.station },
+        action: 'drag_assign'
+      });
+    }, document.getElementById('dragGhost'));
+
+    const tooltip = new TooltipManager({ delay: 300 });
+    tooltip.attach(document.getElementById('pScroll'), '.phone-card .cv');
+    tooltip.attach(document.getElementById('qWrap'), 'td');
+
+    // ============================================================
+    // 消息通信（instanceId 路由）
+    // ============================================================
+    window.addEventListener('message', e => {
+      const msg = e.data; if (!msg || !msg.type) return;
+      if (msg.instanceId && msg.instanceId !== INST) return;
+      switch (msg.type) {
+        case 'RES_DATA_PHONE': phonePanel.receiveData(msg.data); break;
+        case 'RES_DATA_QUESTION': questionPanel.receiveData(msg.data); break;
+        case 'RES_DATA_FILTERED_PHONES': phonePanel.receiveFilteredData(msg.data); break;
+        case 'SET_CONFIG':
+          if (msg.data) {
+            if (msg.data.phoneCfg) Object.assign(phonePanel.config, msg.data.phoneCfg);
+            if (msg.data.questionCfg) Object.assign(questionPanel.config, msg.data.questionCfg);
+            phonePanel.render(); questionPanel.render();
+          }
+          break;
+      }
+    });
+
+    questionPanel.render(); phonePanel.render();
+    sendToParent('REQ_DATA_QUESTION', null);
+    sendToParent('REQ_DATA_PHONE', null);
+  </script>
+</body>
+
+</html>

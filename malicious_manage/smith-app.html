@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmithApp — 不良机监控</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg: #1a1d23;
+            --surface: #21252b;
+            --surface2: #282c34;
+            --border: #3a3f4b;
+            --text: #abb2bf;
+            --text-light: #828997;
+            --primary: #61afef;
+            --success: #98c379;
+            --warning: #e5c07b;
+            --danger: #e06c75;
+            --radius: 6px;
+            --font-mono: 'Cascadia Code', 'Fira Code', Consolas, monospace
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            background: var(--bg);
+            overflow: hidden
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0
+        }
+
+        .header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e5e5e5
+        }
+
+        .header .actions {
+            display: flex;
+            gap: 8px
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            transition: all .15s
+        }
+
+        .btn:hover {
+            background: #353b48;
+            border-color: #555
+        }
+
+        .btn.primary {
+            background: var(--primary);
+            color: #1a1d23;
+            border-color: var(--primary)
+        }
+
+        .btn.primary:hover {
+            background: #7dc4ff
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            height: calc(100% - 49px)
+        }
+
+        .iframe-wrap {
+            flex: 1;
+            min-height: 0
+        }
+
+        .iframe-wrap iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #f5f6fa
+        }
+
+        .log-panel {
+            height: 200px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0
+        }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            font-weight: 600;
+            color: #c8ccd4;
+            flex-shrink: 0
+        }
+
+        .log-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            line-height: 1.7
+        }
+
+        .log-item {
+            display: flex;
+            padding: 2px 12px;
+            gap: 10px;
+            align-items: flex-start
+        }
+
+        .log-item:hover {
+            background: var(--surface2)
+        }
+
+        .log-time {
+            color: var(--text-light);
+            white-space: nowrap;
+            flex-shrink: 0
+        }
+
+        .log-dir {
+            font-weight: 700;
+            flex-shrink: 0;
+            width: 16px;
+            text-align: center
+        }
+
+        .log-dir.in {
+            color: var(--primary)
+        }
+
+        .log-dir.out {
+            color: var(--success)
+        }
+
+        .log-type {
+            color: var(--warning);
+            white-space: nowrap;
+            flex-shrink: 0
+        }
+
+        .log-data {
+            color: var(--text);
+            word-break: break-all
+        }
+
+        .log-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-light);
+            font-family: inherit
+        }
+
+        .log-list::-webkit-scrollbar {
+            width: 4px
+        }
+
+        .log-list::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 2px
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>📊 SmithApp — 不良机监控</h1>
+        <div class="actions">
+            <button class="btn primary" onclick="sendAllData()">📨 发送全部数据</button>
+            <button class="btn" onclick="clearLog()">🧹 清空日志</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="iframe-wrap">
+            <iframe id="appFrame" src="combine.html#id=smith_main"></iframe>
+        </div>
+        <div class="log-panel">
+            <div class="log-header">
+                <span>📋 消息日志 & 队列</span>
+                <span style="font-weight:400;font-size:11px;color:var(--text-light)">
+                    ← 子页面请求 | → 父页面响应 | 队列: <b id="queueSize">0</b>
+                </span>
+            </div>
+            <div class="log-list" id="logList">
+                <div class="log-empty">等待消息...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 消息队列（防止短时间多条消息互相覆盖） ==========
+        const msgQueue = [];
+        let processing = false;
+        const QUEUE_DELAY = 50; // ms between processing
+
+        function enqueue(fn) {
+            msgQueue.push(fn);
+            document.getElementById('queueSize').textContent = msgQueue.length;
+            if (!processing) processQueue();
+        }
+
+        function processQueue() {
+            if (!msgQueue.length) { processing = false; document.getElementById('queueSize').textContent = '0'; return; }
+            processing = true;
+            const fn = msgQueue.shift();
+            document.getElementById('queueSize').textContent = msgQueue.length;
+            fn();
+            setTimeout(processQueue, QUEUE_DELAY);
+        }
+
+        // ========== Mock 数据 ==========
+        function genQuestionData() {
+            const types = ['外观不良', '性能不良', '装配不良', '材料不良', '电气不良'];
+            const problems = {
+                '外观不良': ['屏幕划痕', '外壳色差严重需重新喷漆', '边框毛刺', '镜头灰尘', '按键凹陷', 'LOGO偏位超标'],
+                '性能不良': ['电池续航不足', 'WiFi信号弱', '扬声器杂音', '触控失灵', 'GPS定位偏差'],
+                '装配不良': ['螺丝漏装', '排线未扣紧', '屏蔽罩松动', '防水胶圈错位', '支架断裂'],
+                '材料不良': ['PCB板分层', '连接器氧化', 'FPC断裂', '电容鼓包'],
+                '电气不良': ['短路', '漏电', '静电击穿', '阻抗超差超标需重测']
+            };
+            const levels = ['高', '中', '低'];
+            const stations = ['组装A线', '组装B线', '测试A线', '测试B线', '包装线', 'SMT线'];
+            const statuses = ['待处理', '处理中', '已处理', '已关闭'];
+            const incharges = ['张三', '李四', '王五', '赵六', '陈七', '周八'];
+            const data = [];
+            for (let i = 1; i <= 20; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                data.push({
+                    id: i, type,
+                    problem: problems[type][Math.floor(Math.random() * problems[type].length)],
+                    level: levels[Math.floor(Math.random() * levels.length)],
+                    station: stations[Math.floor(Math.random() * stations.length)],
+                    status: statuses[Math.floor(Math.random() * statuses.length)],
+                    create_time: '2026-06-' + String(10 + Math.floor(Math.random() * 15)).padStart(2, '0'),
+                    incharge: incharges[Math.floor(Math.random() * incharges.length)]
+                });
+            }
+            return data;
+        }
+
+        function genPhoneData() {
+            const models = ['X100', 'X100 Pro Max', 'X200', 'X200 Ultra', 'X50 Lite', 'Fold X1'];
+            const stations = ['组装A线', '组装B线', '测试A线', '测试B线', '包装线'];
+            const analyses = ['屏幕划痕', '边框变形', '电池异常鼓包', '摄像头模组故障', '按键失灵', '扬声器杂音', '信号不良', '充电接口故障'];
+            const remarks = ['初步判定来料不良', '待拆机进一步确认', '已送实验室分析', '疑似装配过程中受损', '测试环境异常导致', '复测后确认不良'];
+            const statuses = ['待维修', '已维修', '已报废'];
+            const lines = ['L1-主产线', 'L2', 'L3-辅线', 'L4'];
+            const operators = ['王五', '赵六', '陈七(夜班)', '周八', '吴九', '郑十'];
+            const data = [];
+            for (let i = 1; i <= 35; i++) {
+                const ws = stations[Math.floor(Math.random() * stations.length)];
+                const an = analyses[Math.floor(Math.random() * analyses.length)];
+                const h = String(8 + Math.floor(Math.random() * 12)).padStart(2, '0');
+                const m = String(Math.floor(Math.random() * 60)).padStart(2, '0');
+                const barcode = 'BC' + String(2026060000 + i) + (i % 4 === 0 ? '-BATCH-A3-XYZ' : '');
+                data.push({
+                    id: i, barcode,
+                    model: models[Math.floor(Math.random() * models.length)],
+                    station: ws,
+                    remark: remarks[Math.floor(Math.random() * remarks.length)],
+                    analysis: an,
+                    problem_id: Math.floor(Math.random() * 20) + 1,
+                    status: statuses[Math.floor(Math.random() * statuses.length)],
+                    line: lines[Math.floor(Math.random() * lines.length)],
+                    operator: operators[Math.floor(Math.random() * operators.length)],
+                    entry_time: '2026-06-' + String(10 + Math.floor(Math.random() * 15)).padStart(2, '0') + ' ' + h + ':' + m
+                });
+            }
+            return data;
+        }
+
+        // ========== 日志 ==========
+        const logList = document.getElementById('logList');
+        function addLog(dir, type, data) {
+            if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+            const now = new Date(), time = now.toTimeString().slice(0, 8);
+            const d = document.createElement('div'); d.className = 'log-item';
+            d.innerHTML = '<span class="log-time">' + time + '</span><span class="log-dir ' + (dir === 'in' ? 'in' : 'out') + '">' + (dir === 'in' ? '←' : '→') + '</span><span class="log-type">' + escH(type) + '</span><span class="log-data">' + escH(JSON.stringify(data).slice(0, 140)) + '</span>';
+            logList.appendChild(d); logList.scrollTop = logList.scrollHeight;
+        }
+        function clearLog() { logList.innerHTML = '<div class="log-empty">日志已清空</div>'; }
+        function escH(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+        // ========== 消息处理（队列防覆盖） ==========
+        window.addEventListener('message', e => {
+            const msg = e.data; if (!msg || !msg.type) return;
+            // 仅处理目标实例
+            if (msg.instanceId && msg.instanceId !== 'smith_main') return;
+
+            addLog('in', msg.type, msg.data);
+
+            enqueue(() => {
+                const frame = document.getElementById('appFrame');
+                if (!frame || !frame.contentWindow) return;
+                const fw = frame.contentWindow;
+
+                switch (msg.type) {
+                    case 'REQ_DATA_QUESTION':
+                        const qd = genQuestionData();
+                        addLog('out', 'RES_DATA_QUESTION', { count: qd.length });
+                        fw.postMessage({ type: 'RES_DATA_QUESTION', data: qd, instanceId: 'smith_main' }, '*');
+                        break;
+
+                    case 'REQ_DATA_PHONE':
+                        const pd = genPhoneData();
+                        addLog('out', 'RES_DATA_PHONE', { count: pd.length });
+                        fw.postMessage({ type: 'RES_DATA_PHONE', data: pd, instanceId: 'smith_main' }, '*');
+                        break;
+
+                    case 'QUESTION_QUERY_PHONES':
+                        // 双击问题 → 查询关联手机
+                        const qid = msg.data?.questionId;
+                        const allPhone = genPhoneData(); // 实际应从数据库查，这里随机模拟
+                        const filtered = allPhone.filter(p => p.problem_id === qid);
+                        // 如果匹配太少，补几条
+                        if (filtered.length < 2) {
+                            for (let i = 0; i < 5 && i < allPhone.length; i++) {
+                                if (!filtered.find(f => f.id === allPhone[i].id)) filtered.push(allPhone[i]);
+                            }
+                        }
+                        addLog('out', 'RES_DATA_FILTERED_PHONES', { questionId: qid, count: filtered.length });
+                        fw.postMessage({ type: 'RES_DATA_FILTERED_PHONES', data: filtered, instanceId: 'smith_main' }, '*');
+                        break;
+
+                    case 'PHONE_BATCH_REPAIR': case 'PHONE_BATCH_SCRAP':
+                    case 'PHONE_EXPORT_SELECTED': case 'PHONE_COPY_SN':
+                    case 'PHONE_DBLCLICK': case 'PHONE_TO_QUESTION':
+                    case 'QUESTION_DETAIL': case 'QUESTION_MARK_RESOLVED':
+                    case 'QUESTION_ASSIGN': case 'QUESTION_EXPORT': case 'QUESTION_DELETE':
+                        addLog('out', msg.type + '_ACK', { status: 'received', ...msg.data });
+                        fw.postMessage({ type: 'OPERATION_RESULT', data: { msgId: msg.type, success: true, message: '操作已接收: ' + msg.type }, instanceId: 'smith_main' }, '*');
+                        break;
+                }
+            });
+        });
+
+        function sendAllData() {
+            const frame = document.getElementById('appFrame');
+            if (!frame || !frame.contentWindow) return;
+            const qd = genQuestionData(); const pd = genPhoneData();
+            frame.contentWindow.postMessage({ type: 'RES_DATA_QUESTION', data: qd, instanceId: 'smith_main' }, '*');
+            frame.contentWindow.postMessage({ type: 'RES_DATA_PHONE', data: pd, instanceId: 'smith_main' }, '*');
+            addLog('out', 'RES_DATA_QUESTION', { count: qd.length });
+            addLog('out', 'RES_DATA_PHONE', { count: pd.length });
+        }
+
+        document.getElementById('appFrame').addEventListener('load', () => setTimeout(sendAllData, 300));
+    </script>
+</body>
+
+</html>
