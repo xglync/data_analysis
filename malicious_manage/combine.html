@@ -1141,6 +1141,8 @@
       _dragSrc(scroll) {
         const self = this;
         scroll.addEventListener('dragstart', e => {
+          // 框选进行中 → 阻止拖拽，避免与框选的 mouseup 冲突
+          if (self._sel.ing) { e.preventDefault(); return; }
           const item = self._R.findItem(e.target); if (!item) { e.preventDefault(); return; }
           const id = Number(item.dataset.id); if (!self.selected.has(id)) { self.selected.clear(); self.selected.add(id); self.updateSelectionUI(); }
           const phones = self.getSelectedItems(); if (!phones.length) { e.preventDefault(); return; }
